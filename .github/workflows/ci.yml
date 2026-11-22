@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '11.0.x'
+      - uses: step-security/msvc-dev-cmd@v1
+      # MSVC の Platform=x64 はソリューションの Any CPU 構成と衝突する。
+      - name: ソリューションのプラットフォームを既定に戻す
+        shell: pwsh
+        run: '"Platform=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append'
       - uses: leafo/gh-actions-lua@v13
         with:
           luaVersion: '5.4.8'
@@ -49,8 +54,5 @@ jobs:
         run: |
           if (-not (Get-Command lua-language-server -ErrorAction SilentlyContinue)) { throw 'lua-language-server が見つかりません' }
           ./tools/lua-check.ps1
-      # MSVC の環境変数 Platform=x64 は、ソリューションの Any CPU 構成と衝突する。
-      # ソリューションの操作が終わってから NativeAOT 用の環境を読み込む。
-      - uses: step-security/msvc-dev-cmd@v1
       - name: NativeAOT ビルド
         run: dotnet publish Yazipane -c Release --no-restore -o ${{ runner.temp }}/yazipane-publish
