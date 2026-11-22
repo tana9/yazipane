@@ -17,10 +17,6 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '11.0.x'
-      - uses: step-security/msvc-dev-cmd@v1
-      - uses: leafo/gh-actions-lua@v13
-        with:
-          luaVersion: '5.4.8'
       - name: Lua Language Server を用意
         shell: pwsh
         run: |
@@ -30,6 +26,14 @@ jobs:
           Invoke-WebRequest "https://github.com/LuaLS/lua-language-server/releases/download/$version/lua-language-server-$version-win32-x64.zip" -OutFile $zip
           Expand-Archive $zip $dir
           (Join-Path $dir 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - uses: step-security/msvc-dev-cmd@v1
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: '5.4.8'
+      # MSVC の Platform=x64 はソリューションの Any CPU 構成と衝突する。
+      - name: ソリューションのプラットフォームを初期化
+        shell: pwsh
+        run: '"Platform=" >> $env:GITHUB_ENV'
       - name: 依存関係を復元
         run: dotnet restore yazipane.slnx
       - name: C# のテスト
