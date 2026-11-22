@@ -1,0 +1,105 @@
+# yazipane の開発用タスク（https://taskfile.dev）
+#   task            タスクの一覧
+#   task restart    起動中の yazipane を終了 → ビルド → 起動（開発中はこれ）
+#
+# コマンドは bash 互換のシェルで動くため、PowerShell の処理は tools/*.ps1 に分けている
+# （インラインで書くと $_ などがシェル側で展開されて壊れる）。
+version: '3'
+
+vars:
+  EXE: publish/yazipane.exe
+  APP: Yazipane
+
+tasks:
+  default:
+    desc: タスクの一覧を表示する
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: NativeAOT でビルドして publish/yazipane.exe を作る（起動中は exe を上書きできないので restart を使う）
+    sources:
+      - '{{.APP}}/**/*.cs'
+      - '{{.APP}}/assets/**/*'
+      - '{{.APP}}/app.manifest'
+      - '{{.APP}}/Yazipane.csproj'
+      - '{{.APP}}/icon/yazipane.ico'
+      - LICENSE
+      - THIRD-PARTY-NOTICES.md
+    generates:
+      - '{{.EXE}}'
+    cmds:
+      - dotnet publish {{.APP}} -c Release -o publish
+
+  test:
+    desc: 単体テストを実行する
+    cmds:
+      - pwsh -NoProfile -File tools/test.ps1
+
+  coverage:
+    desc: C# の単体テストのカバレッジを測り、ファイルごとの行カバレッジを表示する（結果は .cache/coverage）
+    cmds:
+      - pwsh -NoProfile -File tools/coverage.ps1
+
+  coverage-all:
+    desc: 単体テストとスモークテスト（Debug のビルドで実行。WezTerm のウィンドウが開く）のカバレッジを測って合算する
+    cmds:
+      - pwsh -NoProfile -File tools/coverage.ps1 -Smoke
+
+  lint:
+    desc: 書式と静的チェック（C# は .editorconfig のとおりか、Lua は lua-language-server で）
+    cmds:
+      - dotnet format yazipane.slnx --verify-no-changes
+      - pwsh -NoProfile -File tools/lua-check.ps1
+
+  smoke:
+    desc: 一時フォルダで yazipane を起動し、ペイン間の連携を ya emit-to で一通り確かめる
+    deps: [build]
+    cmds:
+      - pwsh -NoProfile -File tools/smoke.ps1
+
+  run:
+    desc: 'yazipane を起動する（引数は task run -- C:\a D:\b のように渡す）'
+    deps: [build]
+    cmds:
+      # yazipane.exe は WezTerm の終了まで待機するので、切り離して起動する
+      - pwsh -NoProfile -File tools/start.ps1 {{.CLI_ARGS}}
+
+  debug:
+    desc: --debug 付きで起動する（ログは task log で見る）
+    deps: [build]
+    cmds:
+      - pwsh -NoProfile -File tools/start.ps1 --debug {{.CLI_ARGS}}
+
+  stop:
+    desc: 起動中の yazipane を終了する（普段使いの WezTerm / yazi には触れない）
+    cmds:
+      - pwsh -NoProfile -File tools/stop.ps1
+
+  restart:
+    desc: 起動中の yazipane を終了してからビルドし、起動する
+    cmds:
+      - task: stop
+      - task: run
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
+  log:
+    desc: yazipane とプラグインのログ（--debug で起動したとき）を表示する
+    cmds:
+      - pwsh -NoProfile -File tools/show-log.ps1
+
+  icon:
+    desc: アイコン（Yazipane/icon/yazipane.ico）を作り直す
+    sources:
+      - tools/make-icon.ps1
+    generates:
+      - '{{.APP}}/icon/yazipane.ico'
+    cmds:
+      - pwsh -NoProfile -File tools/make-icon.ps1
+
+  clean:
+    desc: ビルドで作られたファイル（bin / obj / publish）を消す
+    cmds:
+      - pwsh -NoProfile -File tools/clean.ps1

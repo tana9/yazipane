@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Yazipane/Yazipane.csproj" />
+  <Project Path="Yazipane.Tests/Yazipane.Tests.csproj" />
+</Solution>

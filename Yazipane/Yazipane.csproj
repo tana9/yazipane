@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <RootNamespace>Yazipane</RootNamespace>
+    <AssemblyName>yazipane</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- アイコンは tools/make-icon.ps1 で icon/ に生成する -->
+    <ApplicationIcon>icon\yazipane.ico</ApplicationIcon>
+
+    <!-- バージョン情報（exe のプロパティに表示される） -->
+    <Version>0.1.0</Version>
+    <Product>yazipane</Product>
+    <Description>WezTerm 上で yazi を 2 画面で使うランチャー</Description>
+    <Copyright>tana9</Copyright>
+
+    <!-- 1 つの exe として配布する -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- 右クリックのたびに起動されるので、起動時間を優先して NativeAOT でネイティブの 1 exe にする
+         （ビルドには Visual Studio Build Tools の C++ ワークロードが必要）。 -->
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Speed</OptimizationPreference>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- 配布する exe には PDB を付けない（Debug では作る。テストのカバレッジの計測に要る） -->
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Yazipane.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 名前空間はフォルダごと（Commands / Common / Interop / Launch）。互いに使うので、プロジェクト全体で using する -->
+    <Using Include="Yazipane.Commands" />
+    <Using Include="Yazipane.Common" />
+    <Using Include="Yazipane.Interop" />
+    <Using Include="Yazipane.Launch" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WezTerm / yazi の設定とプラグインを exe に埋め込む（リソース名は assets/... のパス） -->
+    <EmbeddedResource Include="assets\**\*" LogicalName="assets/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- exe と一緒に配布するライセンス（publish の出力先に置く） -->
+    <None Include="..\LICENSE;..\THIRD-PARTY-NOTICES.md" Link="%(Filename)%(Extension)"
+          CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Tomlyn" Version="2.11.1" />
+  </ItemGroup>
+
+</Project>

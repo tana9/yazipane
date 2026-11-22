@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
+      - uses: step-security/msvc-dev-cmd@v1
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: '5.4.8'
+      - name: Lua Language Server を用意
+        shell: pwsh
+        run: |
+          $version = '3.19.2'
+          $dir = Join-Path $env:RUNNER_TEMP 'lua-language-server'
+          $zip = Join-Path $env:RUNNER_TEMP 'lua-language-server.zip'
+          Invoke-WebRequest "https://github.com/LuaLS/lua-language-server/releases/download/$version/lua-language-server-$version-win32-x64.zip" -OutFile $zip
+          Expand-Archive $zip $dir
+          (Join-Path $dir 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: 依存関係を復元
+        run: dotnet restore yazipane.slnx
+      - name: C# のテスト
+        run: dotnet test yazipane.slnx --no-restore
+      - name: Lua のテスト
+        shell: pwsh
+        run: |
+          lua Yazipane.Tests/lua/plugin_test.lua Yazipane/assets/yazi/plugins/yazipane.yazi/main.lua
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          lua Yazipane.Tests/lua/wezterm_test.lua Yazipane/assets/wezterm.lua
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: C# の書式
+        run: dotnet format yazipane.slnx --no-restore --verify-no-changes
+      - name: C# のスタイル
+        run: dotnet format style yazipane.slnx --no-restore --severity info --verify-no-changes
+      - name: Lua の静的チェック
+        shell: pwsh
+        run: |
+          if (-not (Get-Command lua-language-server -ErrorAction SilentlyContinue)) { throw 'lua-language-server が見つかりません' }
+          ./tools/lua-check.ps1
+      - name: NativeAOT ビルド
+        run: dotnet publish Yazipane -c Release --no-restore -o ${{ runner.temp }}/yazipane-publish

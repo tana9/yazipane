@@ -1,0 +1,19 @@
+# ビルド成果物
+bin/
+obj/
+publish/
+
+# Taskfile の変更検知用キャッシュ
+.task/
+
+# Lua の静的チェック用に取得した型定義など（tools/lua-check.ps1）
+.cache/
+
+# アイコン生成時の確認用画像
+Yazipane/icon/preview.png
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user

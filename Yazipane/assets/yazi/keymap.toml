@@ -1,0 +1,22 @@
+# yazipane 用のキー割り当て。普段の keymap.toml の prepend_keymap の先頭に連結される
+[mgr]
+prepend_keymap = [
+	{ on = "q",     run = "plugin yazipane quit", desc = "両方のペインを終了" },
+	{ on = "<F5>",  run = "plugin yazipane copy", desc = "選択ファイルを反対ペインへコピー" },
+	{ on = "<F6>",  run = "plugin yazipane move", desc = "選択ファイルを反対ペインへ移動" },
+	{ on = "=",     run = "plugin yazipane push", desc = "反対ペインをこちらと同じ場所へ" },
+	{ on = "<A-o>", run = "plugin yazipane pull", desc = "こちらを反対ペインと同じ場所へ" },
+	{ on = "<A-s>", run = "plugin yazipane swap", desc = "左右のフォルダを入れ替え" },
+	{ on = "<A-i>", run = "plugin yazipane open-peer", desc = "カーソル位置のフォルダを反対ペインで開く" },
+	{ on = "<A-n>", run = "plugin yazipane new-window", desc = "同じ左右のフォルダで新しいウィンドウを開く" },
+	{ on = "<A-d>",   run = "plugin yazipane drives", desc = "ドライブを選んで移動" },
+	{ on = "<A-e>",   run = "plugin yazipane explorer", desc = "今のフォルダをエクスプローラーで開く" },
+	{ on = "<S-F10>", run = "plugin yazipane menu", desc = "右クリックメニュー" },
+	{ on = "<C-c>",   run = "plugin yazipane clipboard", desc = "ファイルをクリップボードにコピー（ほかのアプリで Ctrl+V）" },
+	{ on = "<A-x>",   run = "plugin yazipane clipboard-cut", desc = "ファイルをクリップボードに切り取り" },
+	{ on = "<C-v>",   run = "plugin yazipane paste", desc = "エクスプローラーなどでコピーしたファイルを貼り付け" },
+	{ on = "<A-p>",   run = "plugin yazipane preview", desc = "プレビュー列の表示/非表示（両ペイン）" },
+	{ on = "<A-l>",   run = "plugin yazipane layout-toggle", desc = "列の表示を 2 画面用 / yazi 本来の 3 列で切り替え" },
+	{ on = "<A-c>",   run = "plugin yazipane compare", desc = "反対ペインと比べ、こちらにしか無い / 新しいものを選択" },
+	{ on = "<A-h>",   run = "plugin yazipane help", desc = "yazipane のキー一覧（WezTerm 側のキーも）" },
+]

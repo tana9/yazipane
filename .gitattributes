@@ -1,0 +1,3 @@
+# 改行コードは LF に統一する（assets/ は exe にそのまま埋め込まれるため、チェックアウト環境で変わらないようにする）
+* text=auto eol=lf
+*.exe binary
