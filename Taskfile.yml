@@ -59,6 +59,12 @@ tasks:
     cmds:
       - pwsh -NoProfile -File tools/smoke.ps1
 
+  ui-smoke:
+    desc: 対話可能な Windows デスクトップで実際のキー操作を確かめる（ウィンドウが前面になる）
+    deps: [build]
+    cmds:
+      - pwsh -NoProfile -STA -File tools/ui-smoke.ps1
+
   run:
     desc: 'yazipane を起動する（引数は task run -- C:\a D:\b のように渡す）'
     deps: [build]

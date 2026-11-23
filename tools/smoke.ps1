@@ -1,7 +1,7 @@
 # yazipane の連携機能のスモークテスト。
 # 一時フォルダで yazipane を起動し、ya emit-to で操作して、ファイル / ウィンドウタイトル / プラグインのログで結果を確かめる。
 #   task smoke（publish/yazipane.exe を最新にしてから実行する）
-# - 前回のフォルダの記録（last-*.txt）はテスト中に書き換わるので、退避して最後に戻す。
+# - yazipane の設定・状態・ログはテスト専用フォルダに生成し、最後に片付ける。yazi 本体のログは通常の保存先を使う。
 # - マウス / キー操作が必要なもの（右クリックメニュー、ドラッグ、Ctrl+Shift+Z のキー自体）は対象外。
 
 #   -Exe: 試す yazipane.exe（既定は publish/yazipane.exe。カバレッジを測るときは Debug のビルドを渡す: tools/coverage-smoke.ps1）
@@ -10,10 +10,15 @@ param([string]$Exe)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'publish/yazipane.exe' }
-$state = Join-Path $env:LOCALAPPDATA 'yazipane'
+$testSession = [guid]::NewGuid().ToString('N')
+$state = Join-Path $env:LOCALAPPDATA "yazipane/smoke/$testSession"
+$oldTestSession = $env:YAZIPANE_TEST_SESSION
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("yazipane-smoke-" + [guid]::NewGuid().ToString('N'))
 $L = Join-Path $work 'left'
 $R = Join-Path $work 'right'
+$pairName = 'smoke-' + [guid]::NewGuid().ToString('N')
+$pairKey = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($pairName))) + '.txt'
+$pairFile = Join-Path $state "pairs/$pairKey"
 
 if (-not (Test-Path $exe)) { throw "$exe がありません。先に task build を実行してください。" }
 if (-not (Get-Command ya -ErrorAction SilentlyContinue)) { throw 'ya.exe が見つかりません。' }
@@ -42,13 +47,8 @@ function Send-Emit([uint64]$id, [string[]]$action) {
 New-Item -ItemType Directory -Force $L, $R, (Join-Path $L 'sub') | Out-Null
 'a', 'b', 'c', 'd' | ForEach-Object { Set-Content (Join-Path $L "$_.txt") $_ }
 
-$backup = @{}
-foreach ($side in 'left', 'right') {
-    $f = Join-Path $state "last-$side.txt"
-    if (Test-Path $f) { $backup[$f] = Get-Content $f -Raw }
-}
-
 try {
+    $env:YAZIPANE_TEST_SESSION = $testSession
     $launcher = Start-Process -FilePath $exe -ArgumentList '--debug', "`"$L`"", "`"$R`"" -PassThru
 
     # yazi が 2 つ起動するまで待つ（普段の WezTerm 設定の読み込みで数秒かかる）
@@ -118,6 +118,76 @@ try {
 
     # 1 画面 / 2 画面の切り替え（Ctrl+Shift+Z）は WezTerm に任せている。WezTerm 側で切り替えても yazi の列が追従する
     $leftPane = (wezterm cli list --format json | ConvertFrom-Json | Where-Object { $_.cwd -like '*left*' } | Select-Object -First 1).pane_id
+    $rightPane = (wezterm cli list --format json | ConvertFrom-Json | Where-Object { $_.cwd -like '*right*' } | Select-Object -First 1).pane_id
+    wezterm cli activate-pane --pane-id $rightPane
+    Test-Step 'フォーカスした右ペインに目印を出す' { (wezterm cli get-text --pane-id $rightPane) -match '(?m)^ ▶ ' }
+    wezterm cli activate-pane --pane-id $leftPane
+    Test-Step 'フォーカスを左へ戻すと目印も移る' {
+        (wezterm cli get-text --pane-id $leftPane) -match '(?m)^ ▶ ' -and
+        (wezterm cli get-text --pane-id $rightPane) -notmatch '(?m)^ ▶ '
+    }
+    Set-Content (Join-Path $L 'compare-left.txt') 'left'
+    Set-Content (Join-Path $L 'compare-left2.txt') 'left2'
+    Set-Content (Join-Path $R 'compare-right.txt') 'right'
+    Set-Content (Join-Path $L 'compare-size.txt') 'short'
+    Set-Content (Join-Path $R 'compare-size.txt') 'longer content'
+    Set-Content (Join-Path $L 'compare-newer.txt') 'same'
+    Set-Content (Join-Path $R 'compare-newer.txt') 'same'
+    $compareTime = [DateTime]::UtcNow.AddMinutes(-10)
+    [IO.File]::SetLastWriteTimeUtc((Join-Path $L 'compare-size.txt'), $compareTime)
+    [IO.File]::SetLastWriteTimeUtc((Join-Path $R 'compare-size.txt'), $compareTime)
+    [IO.File]::SetLastWriteTimeUtc((Join-Path $L 'compare-newer.txt'), $compareTime)
+    [IO.File]::SetLastWriteTimeUtc((Join-Path $R 'compare-newer.txt'), $compareTime.AddMinutes(1))
+    Send-Emit $left plugin, yazipane, compare
+    Test-Step 'Alt+C: 左右の違いを一覧表示する' {
+        $screen = wezterm cli get-text --pane-id $leftPane | Out-String
+        $screen -match '左のみ\s+compare-left.txt' -and $screen -match '右のみ\s+compare-right.txt' -and
+        $screen -match 'サイズが違う\s+compare-size.txt' -and $screen -match '右が新しい\s+compare-newer.txt'
+    }
+    if ($results[-1].Result -eq 'NG') { wezterm cli get-text --pane-id $leftPane }
+    wezterm cli send-text --pane-id $leftPane --no-paste ([string][char]27)
+    Test-Step 'Alt+C: Esc で一覧を閉じる' { (wezterm cli get-text --pane-id $leftPane) -notmatch '左のみ\s+compare-left.txt' }
+    Send-Emit $left plugin, yazipane, compare
+    Test-Step 'Alt+C: 選択の前に一覧を再表示する' { (wezterm cli get-text --pane-id $leftPane) -match '左のみ\s+compare-left.txt' }
+    wezterm cli send-text --pane-id $leftPane --no-paste 's'
+    Test-Step 'Alt+C: S でこちら側の項目を選択する' { (wezterm cli get-text --pane-id $leftPane) -match '選択しました' }
+    Send-Emit $left plugin, yazipane, copy-now
+    Test-Step 'Alt+C: 複数選択した差分を F5 でコピーできる' {
+        (Test-Path -LiteralPath (Join-Path $R 'compare-left.txt')) -and
+        (Test-Path -LiteralPath (Join-Path $R 'compare-left2.txt'))
+    }
+    if ($results[-1].Result -eq 'NG') {
+        wezterm cli get-text --pane-id $leftPane
+        Get-ChildItem (Join-Path $state 'logs') -Recurse -Filter 'transfer-*.log' | ForEach-Object { Get-Content -LiteralPath $_.FullName }
+    }
+    Send-Emit $left plugin, yazipane, folder-pairs
+    Test-Step 'Alt+B: 保存 / 復元メニューを表示する' { (wezterm cli get-text --pane-id $leftPane) -match '(?m)^│> s\s+' }
+    wezterm cli send-text --pane-id $leftPane --no-paste 's'
+    Test-Step 'Alt+B: 名前の入力欄を表示する' { (wezterm cli get-text --pane-id $leftPane) -match 'フォルダの組の名前' }
+    wezterm cli send-text --pane-id $leftPane --no-paste $pairName
+    wezterm cli send-text --pane-id $leftPane --no-paste "`r"
+    Test-Step 'Alt+B: フォルダの組を保存する' { Test-Path -LiteralPath $pairFile }
+    Send-Emit $left cd, $R
+    Send-Emit $right cd, $L
+    Test-Step 'Alt+B: 復元前に左右を入れ替える' { (& $title) -match 'right\s+│\s+left' }
+    Send-Emit $left plugin, yazipane, folder-pairs
+    Test-Step 'Alt+B: メニューを再表示する' { (wezterm cli get-text --pane-id $leftPane) -match '(?m)^│> s\s+' }
+    wezterm cli send-text --pane-id $leftPane --no-paste 'o'
+    Test-Step 'Alt+B: 保存した組を一覧に出す' { (wezterm cli get-text --pane-id $leftPane) -match [regex]::Escape($pairName) }
+    $pairText = (wezterm cli get-text --pane-id $leftPane | Out-String)
+    $pairMatch = [regex]::Match($pairText, '(?m)^│(?:> |  )([a-z0-9])\s+' + [regex]::Escape($pairName))
+    if ($pairMatch.Success) { wezterm cli send-text --pane-id $leftPane --no-paste $pairMatch.Groups[1].Value }
+    Test-Step 'Alt+B: 保存した左右のフォルダを復元する' { (& $title) -match 'left\s+│\s+right' }
+    Send-Emit $left plugin, yazipane, folder-pairs
+    Test-Step 'Alt+B: 削除メニューを表示する' { (wezterm cli get-text --pane-id $leftPane) -match '(?m)^│> s\s+' }
+    wezterm cli send-text --pane-id $leftPane --no-paste 'd'
+    Test-Step 'Alt+B: 削除する組を表示する' { (wezterm cli get-text --pane-id $leftPane) -match [regex]::Escape($pairName) }
+    $pairText = (wezterm cli get-text --pane-id $leftPane | Out-String)
+    $pairMatch = [regex]::Match($pairText, '(?m)^│(?:> |  )([a-z0-9])\s+' + [regex]::Escape($pairName))
+    if ($pairMatch.Success) { wezterm cli send-text --pane-id $leftPane --no-paste $pairMatch.Groups[1].Value }
+    Test-Step 'Alt+B: 削除の確認を表示する' { (wezterm cli get-text --pane-id $leftPane) -match '削除' }
+    wezterm cli send-text --pane-id $leftPane --no-paste 'y'
+    Test-Step 'Alt+B: 確認した組を削除する' { -not (Test-Path -LiteralPath $pairFile) }
     $driveRoot = [IO.Path]::GetPathRoot($L)
     $drivePattern = '(?im)^│> ' + [regex]::Escape($driveRoot.Substring(0, 1)) + '\s+' + [regex]::Escape($driveRoot)
     Send-Emit $left plugin, yazipane, drives
@@ -170,11 +240,14 @@ try {
     } 10
 }
 finally {
+    if (Test-Path -LiteralPath $pairFile) { Remove-Item -LiteralPath $pairFile -Force }
     # 失敗して残ったウィンドウを閉じる
     if ($wez) { Stop-Process -Id $wez -ErrorAction SilentlyContinue }
-    foreach ($side in 'left', 'right') {
-        $f = Join-Path $state "last-$side.txt"
-        if ($backup.ContainsKey($f)) { Set-Content $f $backup[$f] -NoNewline } else { Remove-Item $f -ErrorAction SilentlyContinue }
+    $env:YAZIPANE_TEST_SESSION = $oldTestSession
+    $resolvedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'yazipane/smoke'))
+    $resolvedState = [IO.Path]::GetFullPath($state)
+    if ((Split-Path $resolvedState -Parent) -eq $resolvedRoot -and (Test-Path -LiteralPath $resolvedState)) {
+        Remove-Item -LiteralPath $resolvedState -Recurse -Force -ErrorAction SilentlyContinue
     }
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -182,7 +255,7 @@ finally {
 $results | Format-Table -AutoSize
 $ng = @($results | Where-Object Result -eq 'NG').Count
 if ($ng -gt 0) {
-    Write-Host "$ng 件失敗しました（ログ: task log）" -ForegroundColor Red
+    Write-Host "$ng 件失敗しました" -ForegroundColor Red
     exit 1
 }
 Write-Host "すべて成功しました（$($results.Count) 件）" -ForegroundColor Green

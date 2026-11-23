@@ -92,6 +92,9 @@ $all += Invoke-LuaCheck 'yazi' @(
     'Yazipane/assets/yazi/init.lua',
     'Yazipane/assets/yazi/plugins/yazipane.yazi/main.lua'
 ) (Join-Path $yaziTypes 'types.lua') $yaziGlobals
+$all += Invoke-LuaCheck 'yazi-picker' @('Yazipane/assets/yazi/plugins/yazipane-picker.yazi/main.lua') (Join-Path $yaziTypes 'types.lua') $yaziGlobals
+$all += Invoke-LuaCheck 'yazi-pairs' @('Yazipane/assets/yazi/plugins/yazipane-pairs.yazi/main.lua') (Join-Path $yaziTypes 'types.lua') $yaziGlobals
+$all += Invoke-LuaCheck 'yazi-report' @('Yazipane/assets/yazi/plugins/yazipane-report.yazi/main.lua') (Join-Path $yaziTypes 'types.lua') $yaziGlobals
 $all += Invoke-LuaCheck 'wezterm' @('Yazipane/assets/wezterm.lua') $weztermTypes @()
 
 if ($all.Count -gt 0) {

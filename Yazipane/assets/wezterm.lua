@@ -18,6 +18,7 @@ local function pane_env(peer, side)
     YAZI_CONFIG_HOME = os.getenv 'YAZIPANE_CONFIG_HOME',
     YAZIPANE_USER_CONFIG_HOME = os.getenv 'YAZIPANE_USER_CONFIG_HOME',
     YAZIPANE_EXE = os.getenv 'YAZIPANE_EXE',
+    YAZIPANE_YA = os.getenv 'YAZIPANE_YA',
     YAZIPANE_NATIVE_RATIO = os.getenv 'YAZIPANE_NATIVE_RATIO',
     YAZIPANE_USER_WEZTERM = os.getenv 'YAZIPANE_USER_WEZTERM',
     YAZIPANE_STATE_DIR = os.getenv 'YAZIPANE_STATE_DIR',
@@ -233,12 +234,31 @@ end
 
 local CHECK_INTERVAL = 0.3
 
+-- フォーカスの変化だけを yazi に通知し、現在のペインに目印を表示する。
+local function sync_focus(tab)
+  local ids = wezterm.GLOBAL.yazipane_ids or {}
+  local panes = tab:panes_with_info()
+  local active
+  for _, p in ipairs(panes) do
+    if p.is_active then active = tostring(p.pane:pane_id()) end
+  end
+  if not active or wezterm.GLOBAL.yazipane_focus == active or not ya or ya == '' then return end
+  wezterm.GLOBAL.yazipane_focus = active
+  for _, p in ipairs(panes) do
+    local key = tostring(p.pane:pane_id())
+    if ids[key] then
+      wezterm.background_child_process { ya, 'emit-to', ids[key], 'plugin', 'yazipane', key == active and 'focus-on' or 'focus-off' }
+    end
+  end
+end
+
 local function check(window)
   local tab = window:active_tab()
   if tab then
     local ok, err = pcall(function()
       auto_zoom(tab)
       sync_layout(window, tab)
+      sync_focus(tab)
     end)
     if not ok then
       dbg('check: ' .. tostring(err))

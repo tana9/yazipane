@@ -8,6 +8,16 @@ public sealed class LauncherTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    [Fact]
+    public void スモークテストの状態は通常の状態と分離する()
+    {
+        var root = Path.Combine(_temp.Root, "yazipane");
+        var id = Guid.NewGuid().ToString("N");
+        Assert.Equal(root, Launcher.DataDir(_temp.Root, null));
+        Assert.Equal(root, Launcher.DataDir(_temp.Root, @"..\outside"));
+        Assert.Equal(Path.Combine(root, "smoke", id), Launcher.DataDir(_temp.Root, id));
+    }
+
     // ---- ResolveDirs ----
 
     [Fact]

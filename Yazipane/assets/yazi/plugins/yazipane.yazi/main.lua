@@ -147,8 +147,8 @@ end)
 local get_targets = ya.sync(function()
 	local tab = cx.active
 	local paths = {}
-	for _, url in pairs(tab.selected) do
-		paths[#paths + 1] = tostring(url)
+	for _, file in pairs(tab.selected) do
+		paths[#paths + 1] = tostring(file.url)
 	end
 	if #paths == 0 and tab.current.hovered then
 		paths[1] = tostring(tab.current.hovered.url)
@@ -164,8 +164,8 @@ local get_menu_targets = ya.sync(function()
 	local tab = cx.active
 	local hovered = tab.current.hovered
 	local selected = {}
-	for _, url in pairs(tab.selected) do
-		selected[#selected + 1] = url
+	for _, file in pairs(tab.selected) do
+		selected[#selected + 1] = file.url
 	end
 	if not hovered then
 		local paths = {}
@@ -423,9 +423,20 @@ local function peer_dest(allow_same)
 		notify("反対ペインの場所が分かりません", "error")
 		return nil
 	end
-	if not allow_same and dest == get_cwd() then
-		notify("両方のペインが同じディレクトリです", "warn")
-		return nil
+	if not allow_same then
+		if dest == get_cwd() then
+			notify("両方のペインが同じディレクトリです", "warn")
+			return nil
+		end
+		local code, out, err = run_exe({ "--same-dir", dest, get_cwd() })
+		if code ~= 0 then
+			notify("フォルダを比較できません: " .. failure(code, out, err), "error")
+			return nil
+		end
+		if out == "1" then
+			notify("両方のペインが同じディレクトリです", "warn")
+			return nil
+		end
 	end
 	return dest
 end
@@ -526,32 +537,55 @@ local function compare()
 	if not dest then
 		return
 	end
-	local theirs, err = fs.read_dir(Url(dest), {})
+	-- resolve が false の既定値では日時・サイズが入らないため、比較前に取得する。
+	local ours, our_err = fs.read_dir(Url(get_cwd()), { resolve = true })
+	if not ours then return notify("こちらのフォルダを読めません: " .. tostring(our_err), "error") end
+	local theirs, err = fs.read_dir(Url(dest), { resolve = true })
 	if not theirs then
 		return notify("反対ペインのフォルダを読めません: " .. tostring(err), "error")
 	end
-	-- Windows のファイル名は大文字と小文字を区別しない
-	local peer = {}
-	for _, f in ipairs(theirs) do
-		peer[f.name:lower()] = f
+	-- Windows 側のファイルシステムに名前解決させ、大文字小文字や Unicode の違いを正しく扱う。
+	local function child_cha(dir, name)
+		local child = Url(dir):join(name)
+		return fs.cha(child, true)
 	end
-
-	local picks, only, newer = {}, 0, 0
-	for _, f in ipairs(get_current_files()) do
-		local p = peer[f.name:lower()]
+	local visible = {}
+	for _, f in ipairs(get_current_files()) do visible[f.url] = true end
+	local current_label = SIDE == "right" and "右" or "左"
+	local peer_label = SIDE == "right" and "左" or "右"
+	local picks, lines, seen = {}, {}, {}
+	for _, f in ipairs(ours) do
+		local p = child_cha(dest, f.name)
 		if not p then
-			picks[#picks + 1] = f.url
-			only = only + 1
-		elseif not f.is_dir and not p.cha.is_dir and (f.mtime or 0) > (p.cha.mtime or 0) then
-			picks[#picks + 1] = f.url
-			newer = newer + 1
+			lines[#lines + 1] = current_label .. "のみ  " .. f.name
+			if visible[tostring(f.url)] then picks[#picks + 1] = tostring(f.url) end
+		elseif f.cha.is_dummy or p.is_dummy then
+			lines[#lines + 1] = "情報を取得できない  " .. f.name
+		elseif f.cha.is_dir ~= p.is_dir then
+			lines[#lines + 1] = "種類が違う  " .. f.name
+		elseif not f.cha.is_dir then
+			local a, b = f.cha.mtime, p.mtime
+			local size_diff = f.cha.len ~= nil and p.len ~= nil and f.cha.len ~= p.len
+			if not a or not b then
+				lines[#lines + 1] = "日時を取得できない  " .. f.name .. (size_diff and "（サイズも異なる）" or "")
+			elseif a ~= b then
+				local newer = a > b
+				lines[#lines + 1] = (newer and current_label or peer_label) .. "が新しい  " .. f.name .. (size_diff and "（サイズも異なる）" or "")
+				if newer and visible[tostring(f.url)] then picks[#picks + 1] = tostring(f.url) end
+			elseif size_diff then
+				lines[#lines + 1] = "サイズが違う  " .. f.name
+			end
 		end
 	end
-	select_only(picks)
-	if #picks == 0 then
-		notify("反対ペインと同じです（こちらにしか無いもの・こちらの方が新しいものはありません）")
-	else
-		notify(string.format("こちらにしか無い %d 件、こちらの方が新しい %d 件を選択しました（F5 で反対ペインへコピー）", only, newer))
+	for _, f in ipairs(theirs) do
+		if not child_cha(get_cwd(), f.name) then lines[#lines + 1] = peer_label .. "のみ  " .. f.name end
+	end
+	table.sort(lines)
+	if #lines == 0 then lines[1] = "直下の名前・種類・更新日時・サイズに差はありません（内容は比較しません）" end
+	if require("yazipane-report").view(lines) then
+		if #picks == 0 then return notify("こちら側で選択できる項目はありません") end
+		select_only(picks)
+		notify(string.format("こちらにしか無い / 新しい %d 件を選択しました（F5 で反対ペインへコピー）", #picks))
 	end
 end
 
@@ -644,74 +678,18 @@ local function drag()
 end
 
 --- ドライブの一覧から選んで移動する（Alt+D）。キーはドライブ名の英字。
--- 候補の描画とキー入力を分け、yazi の既定の一覧にある左側の固定余白を避ける。
-local show_candidates = ya.sync(function(state, cands)
-	if not (Modal and Modal.children_add and Modal.children_remove) then
-		return nil
-	end
-	local component = { _id = "yazipane-candidates", selected = 1 }
-	function component:new(area) return setmetatable({ area = area }, { __index = self }) end
-	function component:reflow() return { self } end
-	function component:redraw()
-		local a = self.area
-		if a.w < 4 or a.h < 3 then return {} end
-		local height = math.min(#cands, a.h - 2)
-		local box = ui.Rect { x = a.x, y = a.y + a.h - height - 2, w = a.w, h = height + 2 }
-		local inner = ui.Rect { x = box.x + 1, y = box.y + 1, w = box.w - 2, h = height }
-		local lines = {}
-		local first = math.max(1, math.min(self.selected - height + 1, #cands - height + 1))
-		for i = 1, height do
-			local index = first + i - 1
-			lines[i] = (index == self.selected and "> " or "  ") .. cands[index].on .. "  " .. cands[index].desc
-		end
-		return { ui.Clear(box), ui.Border(ui.Edge.ALL):area(box), ui.Text(lines):area(inner) }
-	end
-	local id = Modal:children_add(component, 1000)
-	state.candidate_component = component
-	ui.render()
-	return id
-end)
-
-local update_candidates = ya.sync(function(state, selected)
-	if state.candidate_component then
-		state.candidate_component.selected = selected
-		ui.render()
-	end
-end)
-
-local hide_candidates = ya.sync(function(state, id)
-	Modal:children_remove(id)
-	state.candidate_component = nil
-	ui.render()
-end)
-
 local function choose_candidates(cands)
-	local ok, id = pcall(show_candidates, cands)
-	if not ok or not id then return ya.which { cands = cands } end
-	local keys = { table.unpack(cands) }
-	keys[#keys + 1] = { on = "<Up>" }
-	keys[#keys + 1] = { on = "<Down>" }
-	keys[#keys + 1] = { on = "<Enter>" }
-	local current = 1
-	local selected, result = pcall(function()
-		while true do
-			local key = ya.which { cands = keys, silent = true }
-			if not key then return nil end
-			if key <= #cands then return key end
-			if key == #cands + 3 then return current end
-			if key == #cands + 1 then
-				current = math.max(1, current - 1)
-			elseif key == #cands + 2 then
-				current = math.min(#cands, current + 1)
-			end
-			update_candidates(current)
-		end
-	end)
-	pcall(hide_candidates, id)
-	if not selected then error(result) end
-	return result
+	return require("yazipane-picker").choose(cands)
 end
 
+-- 保存 / 復元の画面は独立したプラグインにまとめる。
+local function folder_pairs()
+	return require("yazipane-pairs").run {
+		require_exe = require_exe, choose = choose_candidates, run_exe = run_exe,
+		notify = notify, failure = failure, peer_dest = peer_dest,
+		get_cwd = get_cwd, send_cd = send_cd, side = SIDE,
+	}
+end
 local function drives()
 	if not require_exe() then
 		return
@@ -777,6 +755,7 @@ local HELP = {
 	"Alt+S             左右のフォルダを入れ替え",
 	"Alt+I             カーソル位置のフォルダを反対ペインで開く",
 	"Alt+N             同じ左右のフォルダで新しいウィンドウを開く",
+	"Alt+B             左右のフォルダの組を保存 / 復元 / 削除",
 	"q                 両方のペインを終了",
 	"",
 	"── Windows との連携 ──",
@@ -789,7 +768,7 @@ local HELP = {
 	"── 表示 ──",
 	"Alt+L             列の表示（2 画面用 / yazi 本来の 3 列）",
 	"Alt+P             プレビュー列の表示 / 非表示",
-	"Alt+C             反対ペインと比べ、こちらにしか無い / 新しいものを選択",
+	"Alt+C             左右の違いを一覧表示（S でこちら側を選択）",
 	"Alt+H             このキー一覧",
 }
 
@@ -810,8 +789,15 @@ function M:setup()
 	plugin_state = state
 	state.free = {}
 	state.free_requested = {}
+	local ya_path = os.getenv("YAZIPANE_YA")
+	state.focused = SIDE == "left" and ya_path ~= nil and ya_path ~= ""
 
-	-- ステータスバーの右側に、今のドライブの空き容量を出す
+	-- フォーカスの目印と空き容量は、それぞれ独立して登録する
+	pcall(function()
+		Status:children_add(function()
+			return state.focused and ui.Line(" ▶ ") or ""
+		end, 50, Status.LEFT)
+	end)
 	pcall(function()
 		Status:children_add(function()
 			local root = cx.active and drive_root(tostring(cx.active.current.cwd))
@@ -862,6 +848,8 @@ local ACTIONS = {
 	help = show_help,
 	quit = quit_both,
 	preview = toggle_preview,
+	["focus-on"] = ya.sync(function(state) state.focused = true ui.render() end),
+	["focus-off"] = ya.sync(function(state) state.focused = false ui.render() end),
 }
 
 -- 反対ペイン（yazipane から起動された相手の yazi）が必要な操作
@@ -872,6 +860,7 @@ local PEER_ACTIONS = {
 	["open-peer"] = open_in_peer,
 	["new-window"] = new_window,
 	compare = compare,
+	["folder-pairs"] = folder_pairs,
 	copy = function() transfer("copy", true) end,
 	move = function() transfer("move", true) end,
 	-- 確認なし（確認が要らなければ keymap.toml でこちらに割り当てる。スモークテストでも使う）

@@ -30,6 +30,7 @@ local function load(opts)
 			end
 		end,
 		confirm = function() return opts.confirm ~= false end,
+		input = function() return opts.input, opts.input and 1 or 2 end,
 		which = function(args)
 			ctx.which = args
 			if type(opts.which) == "table" then return table.remove(opts.which, 1) end
@@ -59,8 +60,39 @@ local function load(opts)
 			selected = opts.selected or {},
 		},
 	}
-	Url = function(s) return s end
-	fs = { read_dir = function() return opts.peer_files or {} end }
+	local url_meta = {}
+	url_meta.__tostring = function(u) return u.path end
+	url_meta.__index = {
+		join = function(u, child)
+			return setmetatable({ path = u.path:gsub("[\\/]+$", "") .. "\\" .. child }, url_meta)
+		end,
+	}
+	Url = function(s) return setmetatable({ path = s }, url_meta) end
+	local peer_cwd = opts.peer_cwd or "C:\\peer"
+	local function find_cha(files, name)
+		for _, f in ipairs(files or {}) do
+			if f.name:lower() == name:lower() then return f.cha end
+		end
+	end
+	fs = {
+		read_dir = function(path, options)
+			assert(options.resolve == true, "比較には日時とサイズの取得が必要")
+			if tostring(path) == (opts.cwd or "C:\\work") then return opts.files or {} end
+			return opts.peer_files or {}
+		end,
+		cha = function(path)
+			local p = tostring(path)
+			if opts.cha then return opts.cha(p) end
+			if p == (opts.cwd or "C:\\work") or p == peer_cwd then
+				if not opts.missing_folder then return { is_dir = true } end
+				return nil
+			end
+			local parent, name = p:match("^(.*)\\([^\\]+)$")
+			if parent == (opts.cwd or "C:\\work") then return find_cha(opts.files, name) end
+			if parent == peer_cwd then return find_cha(opts.peer_files, name) end
+			if parent and parent:match("^%a:$") and not opts.missing_folder then return { is_dir = true } end
+		end,
+	}
 	Command = setmetatable({ PIPED = 1 }, {
 		__call = function()
 			local c, args = {}, nil
@@ -69,7 +101,11 @@ local function load(opts)
 			function c:stderr() return self end
 			function c:output()
 				ctx.commands[#ctx.commands + 1] = table.concat(args, " ")
-				local o = type(opts.output) == "function" and opts.output(args) or opts.output or {}
+				local o
+				if type(opts.output) == "function" then o = opts.output(args)
+				elseif args[1] == "--same-dir" then o = { stdout = "0" }
+				else o = opts.output end
+				o = o or {}
 				if o.error then
 					error(o.error)
 				end
@@ -81,6 +117,20 @@ local function load(opts)
 
 	local getenv = os.getenv
 	os.getenv = function(k) return env[k] end
+	package.loaded["yazipane-picker"] = nil
+	package.preload["yazipane-picker"] = function()
+		local path = PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-picker.yazi/main.lua")
+		return dofile(path)
+	end
+	package.loaded["yazipane-pairs"] = nil
+	package.preload["yazipane-pairs"] = function()
+		local path = PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-pairs.yazi/main.lua")
+		return dofile(path)
+	end
+	package.loaded["yazipane-report"] = nil
+	package.preload["yazipane-report"] = function()
+		return { view = function(lines) ctx.report = lines return opts.report_select ~= false end }
+	end
 	local M = dofile(PLUGIN)
 	M.setup(ctx.state)
 	os.getenv = getenv
@@ -103,7 +153,7 @@ end
 -- yazipane から起動された状態（exe と反対ペインあり）
 local function yazipane(opts)
 	opts = opts or {}
-	opts.env = opts.env or { YAZIPANE_EXE = "yazipane.exe", YAZIPANE_PEER = "2", YAZIPANE_SIDE = "left" }
+	opts.env = opts.env or { YAZIPANE_EXE = "yazipane.exe", YAZIPANE_PEER = "2", YAZIPANE_SIDE = "left", YAZIPANE_YA = "ya.exe" }
 	local ctx = load(opts)
 	ctx.state.peer_cwd = opts.peer_cwd or "C:\\peer"
 	return ctx
@@ -126,11 +176,11 @@ local function file(name, mtime, is_dir)
 	return { name = name, url = url("C:\\work\\" .. name), cha = { is_dir = is_dir or false, mtime = mtime } }
 end
 
---- 選択（cx.active.selected）。パスの一覧から Url の一覧を作る
+--- 選択（cx.active.selected）。パスの一覧から File の一覧を作る
 local function selected(...)
 	local list = {}
 	for _, p in ipairs({ ... }) do
-		list[#list + 1] = url(p)
+		list[#list + 1] = { url = url(p) }
 	end
 	return list
 end
@@ -183,7 +233,8 @@ end)
 test("F5（確認なし）: 反対ペインへ --transfer copy し、選択を解除する", function()
 	local ctx = yazipane { hovered = file("a.txt"), output = { stdout = "1 0 0" } }
 	ctx.run("copy-now")
-	eq(ctx.commands[1], "--transfer copy C:\\peer C:\\work\\a.txt")
+	eq(ctx.commands[1], "--same-dir C:\\peer C:\\work")
+	eq(ctx.commands[2], "--transfer copy C:\\peer C:\\work\\a.txt")
 	eq(#ctx.emitted("escape"), 1, "選択の解除")
 	eq(ctx.notes[1], "info:1 件を反対ペインへコピーしました")
 end)
@@ -192,14 +243,15 @@ test("F6: 選択があれば選択を対象にする", function()
 	local ctx = yazipane { hovered = file("a.txt"), selected = selected("C:\\work\\b.txt", "C:\\work\\c.txt"),
 		output = { stdout = "2 0 0" } }
 	ctx.run("move-now")
-	eq(ctx.commands[1], "--transfer move C:\\peer C:\\work\\b.txt C:\\work\\c.txt")
+	eq(ctx.commands[1], "--same-dir C:\\peer C:\\work")
+	eq(ctx.commands[2], "--transfer move C:\\peer C:\\work\\b.txt C:\\work\\c.txt")
 	eq(ctx.notes[1], "info:2 件を反対ペインへ移動しました")
 end)
 
 test("F5: 確認で取り消したら何もしない", function()
 	local ctx = yazipane { hovered = file("a.txt"), confirm = false }
 	ctx.run("copy")
-	eq(#ctx.commands, 0, "呼んだコマンドの数")
+	eq(#ctx.commands, 1, "同一フォルダの確認だけ行う")
 end)
 
 test("F5: 両方のペインが同じフォルダなら警告だけ", function()
@@ -207,6 +259,14 @@ test("F5: 両方のペインが同じフォルダなら警告だけ", function()
 	ctx.run("copy-now")
 	eq(ctx.notes[1], "warn:両方のペインが同じディレクトリです")
 	eq(#ctx.commands, 0, "呼んだコマンドの数")
+end)
+
+test("F5: 大文字小文字が違う同じフォルダも止める", function()
+	local ctx = yazipane { hovered = file("a.txt"), peer_cwd = "c:\\WORK\\",
+		output = function(args) return args[1] == "--same-dir" and { stdout = "1" } or {} end }
+	ctx.run("copy-now")
+	eq(ctx.notes[1], "warn:両方のペインが同じディレクトリです")
+	eq(#ctx.commands, 1, "ファイル操作は呼ばない")
 end)
 
 test("F5: 途中で取り消されたら（終了コード 4）中止を通知する", function()
@@ -279,6 +339,48 @@ test("Alt+D: 上下の端で選択は範囲外へ移動しない", function()
 	eq(ctx.emitted("cd")[1][1], "D:\\", "移動先")
 end)
 
+test("Alt+B: 左右の順序で名前付きの組を保存する", function()
+	local ctx = yazipane { modal = true, which = { 1 }, input = "仕事", cwd = "C:\\left", peer_cwd = "D:\\right" }
+	ctx.run("folder-pairs")
+	eq(ctx.commands[1], "--pairs list")
+	eq(ctx.commands[2], "--pairs save 仕事 C:\\left D:\\right")
+	eq(ctx.notes[1], "info:フォルダの組を保存しました: 仕事")
+end)
+
+test("Alt+B: 保存した組を両ペインに復元する", function()
+	local ctx = yazipane { modal = true, which = { 2, 1 }, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
+	ctx.run("folder-pairs")
+	eq(ctx.emitted("cd")[1][1], "C:\\left", "こちら")
+	local found
+	for _, p in ipairs(ctx.pubs) do if p.kind == "yazipane-cd" then found = p.value end end
+	eq(found, "D:\\right", "反対側")
+end)
+
+test("Alt+B: 右ペインからでも左右の順序を保つ", function()
+	local ctx = yazipane { modal = true, which = { 1 }, input = "仕事", cwd = "D:\\right", peer_cwd = "C:\\left",
+		env = { YAZIPANE_EXE = "yazipane.exe", YAZIPANE_PEER = "2", YAZIPANE_SIDE = "right" } }
+	ctx.run("folder-pairs")
+	eq(ctx.commands[2], "--pairs save 仕事 C:\\left D:\\right")
+end)
+
+test("Alt+B: 保存されたフォルダが無ければどちらも移動しない", function()
+	local ctx = yazipane { modal = true, which = { 2, 1 }, missing_folder = true,
+		output = { stdout = "仕事\tC:\\left\tD:\\right" } }
+	ctx.run("folder-pairs")
+	eq(#ctx.emitted("cd"), 0)
+	for _, p in ipairs(ctx.pubs) do if p.kind == "yazipane-cd" then error("反対ペインを移動しない") end end
+	eq(ctx.notes[1], "error:保存されたフォルダが見つかりません")
+end)
+
+test("Alt+B: 削除を確認したときだけ保存した組を消す", function()
+	local ctx = yazipane { modal = true, which = { 3, 1 }, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
+	ctx.run("folder-pairs")
+	eq(ctx.commands[2], "--pairs delete 仕事")
+	local cancelled = yazipane { modal = true, which = { 3, 1 }, confirm = false, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
+	cancelled.run("folder-pairs")
+	eq(#cancelled.commands, 1)
+end)
+
 test("Alt+E: yazi の shell で、カーソル位置があれば選択した状態で、無ければフォルダを開く", function()
 	local ctx = yazipane { hovered = file("a.txt") }
 	ctx.run("explorer")
@@ -331,7 +433,58 @@ test("Alt+C: こちらにしか無いもの・こちらの方が新しいファ�
 	end
 	eq(table.concat(revealed, ","), "C:\\work\\only.txt,C:\\work\\newer.txt", "選択したファイル")
 	eq(#ctx.emitted("toggle"), 2, "選択した数")
-	eq(ctx.notes[1], "info:こちらにしか無い 1 件、こちらの方が新しい 1 件を選択しました（F5 で反対ペインへコピー）")
+	eq(ctx.notes[1], "info:こちらにしか無い / 新しい 2 件を選択しました（F5 で反対ペインへコピー）")
+end)
+
+test("Alt+C: 左右それぞれの差とサイズ差を一覧にし、閉じても選択を変えない", function()
+	local size = file("size.txt", 10)
+	size.cha.len = 20
+	local ctx = yazipane { report_select = false, files = { file("left.txt", 1), size }, peer_files = {
+		{ name = "right.txt", cha = { is_dir = false, mtime = 1, len = 1 } },
+		{ name = "size.txt", cha = { is_dir = false, mtime = 10, len = 30 } },
+	} }
+	ctx.run("compare")
+	local report = table.concat(ctx.report, "\n")
+	assert(report:find("左のみ  left.txt", 1, true))
+	assert(report:find("右のみ  right.txt", 1, true))
+	assert(report:find("サイズが違う  size.txt", 1, true))
+	eq(#ctx.emitted("toggle"), 0)
+	eq(#ctx.emitted("escape"), 0)
+end)
+
+test("Alt+C: 右ペインから見ても左右を正しく表示する", function()
+	local ctx = yazipane { report_select = false, files = { file("only-right.txt", 1) },
+		peer_files = { { name = "only-left.txt", cha = { is_dir = false, mtime = 1 } } },
+		env = { YAZIPANE_EXE = "yazipane.exe", YAZIPANE_PEER = "2", YAZIPANE_SIDE = "right" } }
+	ctx.run("compare")
+	local report = table.concat(ctx.report, "\n")
+	assert(report:find("右のみ  only-right.txt", 1, true))
+	assert(report:find("左のみ  only-left.txt", 1, true))
+end)
+
+test("Alt+C: 情報を取得できない項目を同じと判断しない", function()
+	local unavailable = file("unknown.txt", nil)
+	unavailable.cha.is_dummy = true
+	local ctx = yazipane { report_select = false, files = { unavailable }, peer_files = {
+		{ name = "unknown.txt", cha = { is_dir = false, mtime = 1, len = 1 } },
+	} }
+	ctx.run("compare")
+	assert(table.concat(ctx.report, "\n"):find("情報を取得できない  unknown.txt", 1, true))
+end)
+
+test("Alt+C: Unicode の大文字小文字違いを同じ名前として照合する", function()
+	local ours = file("ä.TXT", 10)
+	local peer = { name = "Ä.txt", cha = { is_dir = false, mtime = 10, len = 10 } }
+	local ctx = yazipane { report_select = false, files = { ours }, peer_files = { peer },
+		cha = function(path)
+			if path == "C:\\work" or path == "C:\\peer" then return { is_dir = true } end
+			if path == "C:\\work\\ä.TXT" or path == "C:\\work\\Ä.txt" or path == "C:\\peer\\ä.TXT" or path == "C:\\peer\\Ä.txt" then
+				return { is_dir = false, mtime = 10, len = 10 }
+			end
+		end }
+	ctx.run("compare")
+	eq(#ctx.emitted("toggle"), 0)
+	assert(table.concat(ctx.report, "\\n"):find("差はありません", 1, true), table.concat(ctx.report, "\\n"))
 end)
 
 test("1 画面: 普段の列の比率にし、2 画面に戻すと元の比率に戻す", function()
@@ -348,6 +501,20 @@ test("q: 自分も終了する", function()
 	eq(#ctx.emitted("quit"), 1, "quit")
 end)
 
+test("フォーカス: WezTerm からの通知に合わせる", function()
+	local ctx = yazipane()
+	eq(ctx.state.focused, true)
+	ctx.run("focus-off")
+	eq(ctx.state.focused, false)
+	ctx.run("focus-on")
+	eq(ctx.state.focused, true)
+end)
+
+test("フォーカス: ya が無ければ不正確な目印は出さない", function()
+	local ctx = yazipane { env = { YAZIPANE_EXE = "yazipane.exe", YAZIPANE_PEER = "2", YAZIPANE_SIDE = "left" } }
+	eq(ctx.state.focused, false)
+end)
+
 test("Alt+H: キー一覧に keymap.toml の yazipane のキーがすべて載っている", function()
 	-- main.lua の HELP と keymap.toml がずれないようにする（キーを足したら両方を更新する）
 	local dir = PLUGIN:match("^(.*)[/\\]plugins[/\\]")
@@ -359,7 +526,7 @@ test("Alt+H: キー一覧に keymap.toml の yazipane のキーがすべて載�
 	src:close()
 	local names = {
 		["<F5>"] = "F5", ["<F6>"] = "F6", ["<A-o>"] = "Alt+O", ["<A-s>"] = "Alt+S", ["<A-i>"] = "Alt+I", ["<A-x>"] = "Alt+X", ["<A-n>"] = "Alt+N",
-		["<A-d>"] = "Alt+D", ["<A-e>"] = "Alt+E", ["<S-F10>"] = "Shift+F10", ["<C-c>"] = "Ctrl+C", ["<C-v>"] = "Ctrl+V",
+		["<A-b>"] = "Alt+B", ["<A-d>"] = "Alt+D", ["<A-e>"] = "Alt+E", ["<S-F10>"] = "Shift+F10", ["<C-c>"] = "Ctrl+C", ["<C-v>"] = "Ctrl+V",
 		["<A-p>"] = "Alt+P", ["<A-l>"] = "Alt+L", ["<A-c>"] = "Alt+C", ["<A-h>"] = "Alt+H", ["q"] = "q", ["="] = "=",
 	}
 	for on in keymap:gmatch('on%s*=%s*"([^"]+)"') do
@@ -433,7 +600,7 @@ test("右クリック: 「反対ペインへコピー」は確認を出さず、
 	-- confirm = false なので、確認を出していたら何もしないはず
 	local ctx = yazipane { hovered = file("a.txt"), confirm = false, output = menu_returns("copy") }
 	ctx.run("menu")
-	eq(ctx.commands[2], "--transfer copy C:\\peer C:\\work\\a.txt")
+	eq(ctx.commands[3], "--transfer copy C:\\peer C:\\work\\a.txt")
 	eq(ctx.notes[1], "info:1 件を反対ペインへコピーしました")
 end)
 

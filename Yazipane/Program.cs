@@ -28,6 +28,8 @@ internal static class Program
         ["--drives"] = Drives.List,                   // ドライブの一覧（Alt+D）
         ["--free"] = Drives.Free,                     // ドライブの空き容量（ステータスバー）
         ["--new-window"] = NewWindow.Run,              // 同じ左右のフォルダで新しいウィンドウ
+        ["--pairs"] = FolderPairs.Run,                 // 左右のフォルダの組
+        ["--same-dir"] = Paths.SameDir,                // Windows のパス比較（プラグイン内部）
     };
 
     [STAThread]

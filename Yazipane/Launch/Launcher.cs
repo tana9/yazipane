@@ -60,16 +60,28 @@ internal static partial class Launcher
         {
             psi.ArgumentList.Add(a);
         }
+        if (Guid.TryParseExact(Environment.GetEnvironmentVariable("YAZIPANE_UI_TEST_SESSION"), "N", out var uiTestSession))
+        {
+            psi.ArgumentList.Add("--class");
+            psi.ArgumentList.Add($"yazipane-test-{uiTestSession:N}");
+        }
         SetEnvironment(psi, new Env(baseDir, yaziDir, userYazi, yazi, left, right, id, warnings, restore is not null, logDir));
         Log.Write($"start: {wezterm} {string.Join(" ", psi.ArgumentList)}");
 
         StartAndWait(psi, instances, id, baseDir, restore);
     }
 
-    private static string DataDir()
+    private static string DataDir() => DataDir(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Environment.GetEnvironmentVariable("YAZIPANE_TEST_SESSION"));
+
+    /// <summary>スモークテスト用の状態は、専用の識別子を使って通常の保存先から分離する。</summary>
+    internal static string DataDir(string local, string? testSession)
     {
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(local, "yazipane");
+        var root = Path.Combine(local, "yazipane");
+        return Guid.TryParseExact(testSession, "N", out var id)
+            ? Path.Combine(root, "smoke", id.ToString("N"))
+            : root;
     }
 
     /// <summary>起動ごとのログフォルダを作って記録を始める。起動ごとにフォルダが増えるので、古いものは消す。</summary>

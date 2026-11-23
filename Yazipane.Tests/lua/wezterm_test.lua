@@ -40,7 +40,7 @@ local function new_tab(panes)
 	function t:panes_with_info()
 		local list = {}
 		for i, p in ipairs(self.panes) do
-			list[i] = { pane = p, is_zoomed = self.zoomed == p, left = p.left, width = p.width, title = p.title }
+			list[i] = { pane = p, is_active = self.active == p, is_zoomed = self.zoomed == p, left = p.left, width = p.width, title = p.title }
 		end
 		return list
 	end
@@ -52,14 +52,17 @@ end
 local function load(opts)
 	opts = opts or {}
 	local env = opts.env or { YAZIPANE_YA = "ya.exe", YAZIPANE_LEFT_ID = "11", YAZIPANE_RIGHT_ID = "12" }
-	local ctx = { handlers = {}, background = {}, timers = {}, toasts = {}, errors = {}, actions = {}, spawned = {} }
+	local ctx = { handlers = {}, background = {}, focus_background = {}, timers = {}, toasts = {}, errors = {}, actions = {}, spawned = {} }
 	local wezterm = {
 		GLOBAL = {},
 		home_dir = "C:\\home",
 		config_builder = function() return {} end,
 		on = function(name, f) ctx.handlers[name] = f end,
 		action_callback = function(f) return { callback = f } end,
-		background_child_process = function(args) ctx.background[#ctx.background + 1] = table.concat(args, " ") end,
+		background_child_process = function(args)
+			local target = args[6] and args[6]:match("^focus%-") and ctx.focus_background or ctx.background
+			target[#target + 1] = table.concat(args, " ")
+		end,
 		log_error = function(msg) ctx.errors[#ctx.errors + 1] = msg end,
 		procinfo = {
 			get_info_for_pid = function(pid)
@@ -127,7 +130,7 @@ end
 test("起動時: 左右の yazi に互いのクライアント ID と設定の場所を渡す", function()
 	local ctx = load { env = {
 		YAZIPANE_YAZI = "yazi.exe", YAZIPANE_LEFT_DIR = "C:\\L", YAZIPANE_RIGHT_DIR = "C:\\R",
-		YAZIPANE_LEFT_ID = "11", YAZIPANE_RIGHT_ID = "12", YAZIPANE_CONFIG_HOME = "C:\\gen",
+		YAZIPANE_LEFT_ID = "11", YAZIPANE_RIGHT_ID = "12", YAZIPANE_CONFIG_HOME = "C:\\gen", YAZIPANE_YA = "ya.exe",
 	} }
 	ctx.handlers["gui-startup"]()
 	local l, r = ctx.spawned.left, ctx.spawned.right
@@ -136,6 +139,7 @@ test("起動時: 左右の yazi に互いのクライアント ID と設定の�
 	eq(l.set_environment_variables.YAZIPANE_PEER, "12", "左の相手")
 	eq(r.set_environment_variables.YAZIPANE_PEER, "11", "右の相手")
 	eq(l.set_environment_variables.YAZIPANE_SIDE, "left", "左")
+	eq(l.set_environment_variables.YAZIPANE_YA, "ya.exe", "フォーカス通知の可否")
 	-- WezTerm がレジストリの値で上書きするので、別名で受け取って詰め替える
 	eq(l.set_environment_variables.YAZI_CONFIG_HOME, "C:\\gen", "yazi の設定の場所")
 	eq(ctx.wezterm.GLOBAL.yazipane_ids["1"], "12", "ペイン ID → クライアント ID")
@@ -227,6 +231,19 @@ test("自動 1 画面: 開いている途中で自分で 2 画面に戻したら
 end)
 
 -- ---- yazi への列の切り替えの通知 ----
+
+test("フォーカス: 変化したときだけ両ペインに通知する", function()
+	local ctx = load()
+	local _, right = ctx.panes()
+	ctx.update()
+	eq(table.concat(ctx.focus_background, ";"), "ya.exe emit-to 11 plugin yazipane focus-on;ya.exe emit-to 12 plugin yazipane focus-off")
+	ctx.focus_background = {}
+	ctx.update()
+	eq(#ctx.focus_background, 0, "変化しなければ再送しない")
+	right:activate()
+	ctx.update()
+	eq(table.concat(ctx.focus_background, ";"), "ya.exe emit-to 11 plugin yazipane focus-off;ya.exe emit-to 12 plugin yazipane focus-on")
+end)
 
 test("1 画面にしたら、最大化したペインの yazi を本来の 3 列にし、2 画面に戻したら両方を 2 画面用にする", function()
 	local ctx = load()

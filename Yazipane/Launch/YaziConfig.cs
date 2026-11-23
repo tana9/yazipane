@@ -25,7 +25,7 @@ internal static class YaziConfig
     private static readonly string[] s_passthroughFiles = ["vfs.toml", "package.toml"];
     private static readonly string[] s_passthroughDirs = ["flavors"];
 
-    private const string OwnPlugin = "yazipane.yazi";
+    private static readonly string[] s_ownPlugins = ["yazipane.yazi", "yazipane-picker.yazi", "yazipane-pairs.yazi", "yazipane-report.yazi"];
 
     /// <summary>
     /// 普段使っている yazi の設定ディレクトリを返す。
@@ -146,7 +146,7 @@ internal static class YaziConfig
     private static void BuildPlugins(string dst, string user)
     {
         var plugins = Path.Combine(dst, "plugins");
-        HashSet<string> keep = [with(StringComparer.OrdinalIgnoreCase), OwnPlugin];
+        HashSet<string> keep = [with(StringComparer.OrdinalIgnoreCase), .. s_ownPlugins];
 
         var userPlugins = Path.Combine(user, "plugins");
         if (Directory.Exists(userPlugins))
@@ -154,7 +154,7 @@ internal static class YaziConfig
             foreach (var dir in Directory.EnumerateDirectories(userPlugins))
             {
                 var name = Path.GetFileName(dir);
-                if (name.Equals(OwnPlugin, StringComparison.OrdinalIgnoreCase))
+                if (s_ownPlugins.Contains(name, StringComparer.OrdinalIgnoreCase))
                 {
                     continue;
                 }

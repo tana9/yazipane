@@ -7,6 +7,8 @@ WezTerm 上で [yazi](https://github.com/sxyazi/yazi) を左右 2 画面に並�
 - [WezTerm](https://wezterm.org/)（`wezterm-gui.exe` が PATH 上にあること）
 - [yazi](https://yazi-rs.github.io/)（`yazi.exe` が PATH 上にあること）
 
+動作を確認した組み合わせは Windows 上の yazi `26.9.1` と WezTerm `20240203-110809-5046fc22`。ほかの版では yazi の内部 UI や WezTerm の動作が異なる場合がある。
+
 ## ビルド
 
 .NET SDK 11 と、NativeAOT 用に Visual Studio Build Tools の C++ ワークロードが必要。
@@ -38,8 +40,9 @@ yazipane.slnx
 | `task test` | 単体テスト |
 | `task coverage` | C# の単体テストのカバレッジ（ファイルごとの行カバレッジ） |
 | `task coverage-all` | 単体テストとスモークテストのカバレッジを合算する（スモークテストは Debug のビルドで動かし、dotnet-coverage で子プロセスも含めて測る。WezTerm のウィンドウが開く） |
+| `task ui-smoke` | 実際のキー入力でコピー・移動・クリップボード・メニュー操作を試す（ウィンドウが前面になり、クリップボードを一時的に使う） |
 | `task lint` | 書式と静的チェック（C# が `.editorconfig` のとおりか、Lua を lua-language-server と yazi / WezTerm の型定義で。`scoop install lua-language-server` が必要） |
-| `task smoke` | 一時フォルダで起動し、ペイン間の連携（F5 / F6、y と p の共有、入れ替え、列の切り替え、q など）を `ya emit-to` で一通り確かめる |
+| `task smoke` | テスト専用の状態フォルダで起動し、ペイン間の連携などを `ya emit-to` で確かめる（WezTerm のウィンドウが開く） |
 | `task run [-- 左 右]` / `task debug` | 起動 / `--debug` 付きで起動 |
 | `task log` | `--debug` 時のログを表示 |
 | `task stop` | 起動中の yazipane を終了（普段使いの WezTerm / yazi には触れない） |
@@ -89,7 +92,7 @@ yazipane --unregister    # 上で追加したメニューを消す
 | `Ctrl+Shift+Alt+←` / `→` | ペインの境目を左右に動かす（WezTerm の既定のキー） |
 | `Ctrl+Shift+E` | 左右のペインを同じ幅に戻す |
 
-- マウスでペインをクリックしても切り替えられる。非アクティブなペインは暗く表示される。
+- マウスでペインをクリックしても切り替えられる。非アクティブなペインは暗く表示され、アクティブなペインのステータスバーに `▶` が付く（目印には `ya.exe` が必要）。
 - ウィンドウタイトルに左右のフォルダ名（1 画面のときは `[1画面]` と表示中のフォルダ名）が出る。
 - 1 画面のときは yazi が普段の 3 列表示（普段の `yazi.toml` の `ratio`）になり、2 画面に戻すと 2 画面用の表示に戻る。
 - 1 画面のときに `Ctrl+Tab` を押すと 2 画面に戻ってからペインを移動する。
@@ -112,6 +115,7 @@ yazipane --unregister    # 上で追加したメニューを消す
 | `Alt+S` | 左右のフォルダを入れ替える |
 | `Alt+I` | カーソル位置のフォルダを反対ペインで開く |
 | `Alt+N` | 同じ左右のフォルダで新しいウィンドウを開く |
+| `Alt+B` | 左右のフォルダの組に名前を付けて保存 / 復元 / 削除する（最大 36 件） |
 | `Alt+D` | ドライブの一覧を表示し、英字キーまたは `↑` / `↓` と `Enter` で選んで移動する |
 | `Alt+E` | 今のフォルダをエクスプローラーで開く（カーソル位置の項目を選択した状態で。yazi の既定の opener の reveal と同じ `explorer /select,…`） |
 | `Ctrl+C` | 選択ファイル（選択がなければカーソル位置）をクリップボードにコピー（エクスプローラーや Teams などで `Ctrl+V`） |
@@ -120,10 +124,12 @@ yazipane --unregister    # 上で追加したメニューを消す
 | ドラッグ | ファイルをほかのアプリへドラッグ&ドロップ（試作。コピーかショートカットの作成のみで、移動はしない） |
 | `Alt+L` | 列の表示を「2 画面用（親フォルダ列なし）」/「yazi 本来の 3 列」で切り替え（このペインのみ） |
 | `Alt+P` | プレビュー列（各ペインの右の列）の表示 / 非表示を切り替え（両ペイン同時） |
-| `Alt+C` | 反対ペインと比べて、こちらにしか無いもの・こちらの方が新しいファイルを選択する（続けて `F5` で反対ペインに足りないものをコピーできる。サブフォルダの中までは比べない） |
+| `Alt+C` | 左右の違いを一覧表示する。`S` でこちらにしかない項目・こちらの方が新しいファイルを選択できる |
 | `Alt+H` | yazipane のキーの一覧を表示する（WezTerm 側のキーも含む。yazi のキーは `F1`） |
 | 右クリック / `Shift+F10` | Windows の右クリックメニュー（先頭に「反対ペインへコピー / 移動」「パスをコピー」） |
 
+- `Alt+B` では `s` で保存、`o` で復元、`d` で削除を選ぶ。保存先は `%LOCALAPPDATA%\yazipane\pairs`。復元時は両方のフォルダが存在するか確かめる。
+- `Alt+C` の一覧は `↑` / `↓` と `PageUp` / `PageDown` でスクロールし、`Esc` または `Enter` で閉じる。`S` を押すと表示中のこちら側の「こちらのみ」「こちらが新しい」を選び、`F5` でコピーできる。隠しファイルを含む直下を比較する。ファイルは名前・種類・更新日時・サイズを比べ、フォルダは名前と種類（存在するか）だけを比べる。ファイルの内容やサブフォルダの中は比較しない。選択の対象は現在の一覧に表示されている項目だけ。
 - 右クリックとドラッグは、現在のフォルダの列（中央の列）だけが対象。親フォルダ / プレビューの列は yazi の既定の動作のまま。
 - ドラッグは、ファイルの行の上でボタンを押して始めたときだけ。
 - 右クリックした項目が選択に含まれていれば選択全体、含まれていなければ選択を解除してその項目だけが対象になる（エクスプローラーと同じ）。
@@ -170,6 +176,21 @@ yazipane --unregister    # 上で追加したメニューを消す
 `Ctrl+C` は yazi の既定の「タブを閉じる」を置き換える。タブを閉じるには `Ctrl+C` 以外のキーを普段の `keymap.toml` で `close` に割り当てる。
 WezTerm 側のキー（`Ctrl+Tab` など）は yazi のヘルプには表示されない（`Alt+H` で確認できる）。
 
+### 操作例
+
+- 左から右にコピー: 左でファイルを `Space` で選び、`F5` → コピー先を確認して決定する。
+- エクスプローラーのファイルを貼り付け: エクスプローラーでコピーし、移動先のペインで `Ctrl+V` を押す。
+- 左右の場所を保存: 両ペインを目的のフォルダに移動し、`Alt+B` → `s` → 名前を入力する。復元は `Alt+B` → `o`。
+- 違いを確認: `Alt+C` で一覧を開き、`S` でこちら側の候補を選択してから `F5` でコピーする。
+
+### yazi / WezTerm の更新後
+
+バージョンを `yazi --version` と `wezterm --version` で確認し、`task test`、`task lint`、`task smoke` を実行する。実画面では `Alt+D`、`Alt+C`、右クリック、ペインの切り替えも確認する。`task smoke` は `%LOCALAPPDATA%\yazipane\smoke` の一時フォルダを使い、普段の yazipane の位置・デバッグログ・保存したフォルダの組には触れない。yazi 本体のログは通常の保存先を使う。
+
+右クリック、ドラッグ、Windows の確認ダイアログやクリップボードは [実機での確認](MANUAL_TEST.md) の手順で一時ファイルを使って試せる。
+
+`task ui-smoke` はロックされていない Windows デスクトップで実行する。テスト中はウィンドウが前面になり、キー入力とクリップボードを使うため、他の操作を控える。クリップボードは終了時に復元を試みるが、アプリ独自の形式などは復元できない場合がある。テストは一時ファイルを使い、F5 のキャンセルとコピー、F6 の移動、Ctrl+C、Shift+F10 によるメニュー処理の起動と Esc による終了を確認する。ドラッグやマウスの右クリック、Windows の同名ファイル確認ダイアログは対象外。
+
 ## アイコン
 
 `Yazipane/icon/yazipane.ico` は `pwsh tools/make-icon.ps1`（`task icon`）で生成する（ターミナルのプロンプトとフォルダ。配色は tokyonight 系）。
@@ -185,7 +206,7 @@ WezTerm 側のキー（`Ctrl+Tab` など）は yazi のヘルプには表示さ�
 - ソースは `Yazipane/` 以下:
   - `Program.cs`: 引数の振り分け（yazi のプラグインから呼ばれるサブコマンドか、ランチャーか）
   - `Launch/`: ランチャー（`Launcher.cs` 起動処理、`YaziConfig.cs` 設定の合成、`WindowIcon.cs` / `WindowPlacement.cs` ウィンドウのアイコンと位置、`Instances.cs` `--reuse` 用の記録）
-  - `Commands/`: プラグインから呼ばれるサブコマンド（右クリックメニュー、クリップボード、ドラッグ、コピー / 移動、ドライブ、エクスプローラー）
+  - `Commands/`: プラグインから呼ばれるサブコマンド（右クリックメニュー、クリップボード、ドラッグ、コピー / 移動、ドライブ、フォルダの組、エクスプローラー）
   - `Interop/`: Win32 / COM の共通部品（`Native.cs`、`Com.cs`、`ShellItems.cs`、`OwnerWindow.cs`）
   - `Common/`: 補助（`Files.cs`、`Assets.cs`、`Log.cs`）
 - WezTerm を `--config-file` 付きの新しいプロセスとして起動し、2 つの yazi を別々の `--client-id` で起動する。
@@ -198,13 +219,14 @@ WezTerm 側のキー（`Ctrl+Tab` など）は yazi のヘルプには表示さ�
     また、普段の設定を読み込む分だけ起動が 1〜2 秒遅くなる。
 - yazi の設定は、起動のたびに普段の設定（`YAZI_CONFIG_HOME`、未設定なら `%APPDATA%\yazi\config`）を土台にして
   `%LOCALAPPDATA%\yazipane\yazi` に組み立て直し、`YAZI_CONFIG_HOME` でそちらを使わせる。普段の設定ファイル自体は変更しない。
-  - `plugins/` `flavors/` `vfs.toml` `package.toml`: そのままコピー（プラグインには `yazipane.yazi` を追加）
+  - `plugins/` `flavors/` `vfs.toml` `package.toml`: そのままコピー（プラグインには yazipane 用のものを追加）
   - `init.lua`: yazipane の初期化の後ろに普段の `init.lua` を連結
   - `yazi.toml` `keymap.toml` `theme.toml`: `Yazipane/assets/yazi/` の内容を TOML として重ねる。キー一覧は狭いペインでも読みやすいよう 1 列にする。
     （テーブルは再帰マージ、`prepend_*` は先頭に連結、`append_*` は末尾に連結、それ以外は上書き）
   - WezTerm (Windows) は起動時にレジストリのユーザー環境変数で自身の環境を上書きするため、
     ランチャーからは `YAZIPANE_CONFIG_HOME` という別名で渡し、`wezterm.lua` で詰め替えている。
 - 2 つの yazi はプラグイン `yazipane.yazi` が DDS（`ps.pub_to` / `ps.sub_remote`）で互いのカレントディレクトリを通知し合う。
+  候補一覧は `yazipane-picker.yazi`、フォルダの組の操作は `yazipane-pairs.yazi`、比較一覧は `yazipane-report.yazi` に分ける。
   反対ペインへのコピー/移動は、相手のディレクトリを問い合わせてから `yazipane.exe --transfer` が
   Windows のファイル操作（`IFileOperation`）で行う。相手から応答がなければ操作を中止する。`Ctrl+V` の貼り付け（`--paste`）も同じ。
   項目ごとの結果を受け取り、「2 件をコピーしました（1 件はスキップ）」のように通知する。
