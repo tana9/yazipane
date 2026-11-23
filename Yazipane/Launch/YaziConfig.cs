@@ -22,7 +22,7 @@ internal static class YaziConfig
 {
 
     // ユーザーの yazi 設定をそのままコピーするファイル/ディレクトリ
-    private static readonly string[] s_passthroughFiles = ["theme.toml", "vfs.toml", "package.toml"];
+    private static readonly string[] s_passthroughFiles = ["vfs.toml", "package.toml"];
     private static readonly string[] s_passthroughDirs = ["flavors"];
 
     private const string OwnPlugin = "yazipane.yazi";
@@ -119,8 +119,8 @@ internal static class YaziConfig
         }
         Files.WriteIfChanged(Path.Combine(dst, "init.lua"), Encoding.UTF8.GetBytes(init.ToString()));
 
-        // yazi.toml / keymap.toml: TOML としてマージ
-        foreach (var name in new[] { "yazi.toml", "keymap.toml" })
+        // 設定を TOML としてマージ
+        foreach (var name in new[] { "yazi.toml", "keymap.toml", "theme.toml" })
         {
             var overlay = Encoding.UTF8.GetString(Assets.Read($"assets/yazi/{name}"));
             var userFile = Path.Combine(user, name);

@@ -86,7 +86,7 @@ function Invoke-LuaCheck([string]$name, [string[]]$files, [string]$library, [str
 }
 
 # yazi の UI の部品（型定義に含まれていないもの）
-$yaziGlobals = @('Status', 'Current', 'Header', 'Tab', 'Linemode')
+$yaziGlobals = @('Status', 'Current', 'Header', 'Tab', 'Linemode', 'Modal')
 $all = @()
 $all += Invoke-LuaCheck 'yazi' @(
     'Yazipane/assets/yazi/init.lua',

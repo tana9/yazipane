@@ -30,7 +30,11 @@ local function load(opts)
 			end
 		end,
 		confirm = function() return opts.confirm ~= false end,
-		which = function() return opts.which end,
+		which = function(args)
+			ctx.which = args
+			if type(opts.which) == "table" then return table.remove(opts.which, 1) end
+			return opts.which
+		end,
 	}
 	ps = {
 		pub_to = function(peer, kind, value) ctx.pubs[#ctx.pubs + 1] = { peer = peer, kind = kind, value = value } end,
@@ -44,6 +48,10 @@ local function load(opts)
 		Wrap = { YES = 1 },
 	}
 	Status = { RIGHT = 1, children_add = function() end }
+	Modal = opts.modal and {
+		children_add = function(_, component) ctx.modal = component return 1 end,
+		children_remove = function(_, id) ctx.removed_modal = id end,
+	} or nil
 	rt = { mgr = { ratio = { 0, 3, 2 } } }
 	cx = {
 		active = {
@@ -239,6 +247,35 @@ test("Alt+D: 選んだドライブへ cd する", function()
 	local ctx = yazipane { which = 2, output = { stdout = "C:\\\tシステム\nD:\\\tデータ" } }
 	ctx.run("drives")
 	eq(ctx.commands[1], "--drives")
+	eq(ctx.emitted("cd")[1][1], "D:\\", "移動先")
+end)
+
+test("Alt+D: 独自の一覧を使い、選択後に片付ける", function()
+	local ctx = yazipane { modal = true, which = 1, output = { stdout = "C:\\\t空き 10 GB" } }
+	ctx.run("drives")
+	eq(ctx.which.silent, true, "既定の一覧は表示しない")
+	eq(ctx.which.cands[1].on, "c", "選択キー")
+	eq(ctx.removed_modal, 1, "一覧を削除")
+	eq(ctx.emitted("cd")[1][1], "C:\\", "移動先")
+end)
+
+test("Alt+D: キャンセルしたら一覧を片付け、移動しない", function()
+	local ctx = yazipane { modal = true, output = { stdout = "C:\\\t空き 10 GB" } }
+	ctx.run("drives")
+	eq(ctx.removed_modal, 1, "一覧を削除")
+	eq(#ctx.emitted("cd"), 0, "移動しない")
+end)
+
+test("Alt+D: 下矢印と Enter で次のドライブを選ぶ", function()
+	local ctx = yazipane { modal = true, which = { 4, 5 }, output = { stdout = "C:\\\tシステム\nD:\\\tデータ" } }
+	ctx.run("drives")
+	eq(ctx.emitted("cd")[1][1], "D:\\", "移動先")
+	eq(ctx.removed_modal, 1, "一覧を削除")
+end)
+
+test("Alt+D: 上下の端で選択は範囲外へ移動しない", function()
+	local ctx = yazipane { modal = true, which = { 3, 4, 4, 5 }, output = { stdout = "C:\\\tシステム\nD:\\\tデータ" } }
+	ctx.run("drives")
 	eq(ctx.emitted("cd")[1][1], "D:\\", "移動先")
 end)
 

@@ -187,7 +187,7 @@ public sealed class YaziConfigTests : IDisposable
         // 普段の設定
         _temp.File(@"user\yazi.toml", "[mgr]\nsort_by = \"natural\"\n");
         _temp.File(@"user\init.lua", "-- user init");
-        _temp.File(@"user\theme.toml", "# theme");
+        _temp.File(@"user\theme.toml", "[which]\ncols = 3\nseparator = ' > '\n");
         _temp.File(@"user\plugins\foo.yazi\main.lua", "-- foo");
         _temp.File(@"user\flavors\x.yazi\flavor.toml", "# flavor");
         // 前回の生成物の残り（普段の設定から消えたもの）
@@ -204,7 +204,9 @@ public sealed class YaziConfigTests : IDisposable
         Assert.False(Directory.Exists(_temp.PathOf(@"out\plugins\old.yazi")));
         // そのままコピーするもの
         Assert.True(File.Exists(_temp.PathOf(@"out\flavors\x.yazi\flavor.toml")));
-        Assert.Equal("# theme", File.ReadAllText(_temp.PathOf(@"out\theme.toml")));
+        var which = (TomlTable)Parse(File.ReadAllText(_temp.PathOf(@"out\theme.toml")))["which"];
+        Assert.Equal(1L, which["cols"]);
+        Assert.Equal(" > ", which["separator"]);
         Assert.False(File.Exists(_temp.PathOf(@"out\vfs.toml")));
         // init.lua: yazipane の初期化の後に普段の init.lua
         var init = File.ReadAllText(_temp.PathOf(@"out\init.lua"));

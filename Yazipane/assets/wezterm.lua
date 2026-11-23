@@ -323,6 +323,8 @@ end
 config.hide_tab_bar_if_only_one_tab = true
 -- yazi は自前でスクロールするので、ターミナルのスクロールバーは不要
 config.enable_scroll_bar = false
+-- yazi の入力欄で記号を入力できない場合があるため、拡張キー入力を無効にする
+config.enable_kitty_keyboard = false
 -- 1 画面 / 2 画面の変化と、エディタなどの開閉を update-status で確かめるので、間隔を短めにする
 config.status_update_interval = 300
 -- この設定ファイルは yazipane.exe が起動のたびに書き出すもので、手で編集しない。

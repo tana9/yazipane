@@ -14,13 +14,12 @@ public sealed class DrivesTests
     }
 
     [Fact]
-    public void Describe_システムドライブは種類と空き容量を含む()
+    public void Describe_システムドライブは空き容量を含む()
     {
         var root = Path.GetPathRoot(Environment.SystemDirectory)!;
 
         var text = Drives.Describe(root);
 
-        Assert.Contains("ローカル ディスク", text);
         Assert.Contains("空き", text);
     }
 }

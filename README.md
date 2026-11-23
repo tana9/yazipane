@@ -112,7 +112,7 @@ yazipane --unregister    # 上で追加したメニューを消す
 | `Alt+S` | 左右のフォルダを入れ替える |
 | `Alt+I` | カーソル位置のフォルダを反対ペインで開く |
 | `Alt+N` | 同じ左右のフォルダで新しいウィンドウを開く |
-| `Alt+D` | ドライブの一覧（ボリューム名・空き容量つき）から選んで移動する（ドライブ名の英字キーで選ぶ） |
+| `Alt+D` | ドライブの一覧を表示し、英字キーまたは `↑` / `↓` と `Enter` で選んで移動する |
 | `Alt+E` | 今のフォルダをエクスプローラーで開く（カーソル位置の項目を選択した状態で。yazi の既定の opener の reveal と同じ `explorer /select,…`） |
 | `Ctrl+C` | 選択ファイル（選択がなければカーソル位置）をクリップボードにコピー（エクスプローラーや Teams などで `Ctrl+V`） |
 | `Alt+X` | 選択ファイルをクリップボードに切り取り（エクスプローラーなどで貼り付けると移動） |
@@ -190,16 +190,17 @@ WezTerm 側のキー（`Ctrl+Tab` など）は yazi のヘルプには表示さ�
   - `Common/`: 補助（`Files.cs`、`Assets.cs`、`Log.cs`）
 - WezTerm を `--config-file` 付きの新しいプロセスとして起動し、2 つの yazi を別々の `--client-id` で起動する。
 - WezTerm の設定は、普段の設定（`WEZTERM_CONFIG_FILE`、`~/.config/wezterm/wezterm.lua`、`~/.wezterm.lua` の順に探す）を読み込んだうえで、
-  yazipane に必要なもの（タブバー、スクロールバー、終了時の動作、`Ctrl+Tab` / `Ctrl+Shift+Tab` / `Ctrl+Shift+E`）だけを上書きする。
+  yazipane に必要なもの（タブバー、スクロールバー、終了時の動作、`Ctrl+Tab` / `Ctrl+Shift+Tab` / `Ctrl+Shift+E`）を上書きする。
+  yazi の入力欄で記号を入力できない場合があるため、`enable_kitty_keyboard` は無効にする。
   `Ctrl+Shift+Z`（1 画面 / 2 画面）などは WezTerm の既定のキーをそのまま使う。フォントや配色は普段のものが使われる。
   - 注意: 普段の設定で `wezterm.on('gui-startup', ...)` などのイベント処理を書いていると、yazipane の処理と一緒に動く
     （起動時にウィンドウを開く処理があると、yazipane のウィンドウとは別にもう 1 つ開く）。
     また、普段の設定を読み込む分だけ起動が 1〜2 秒遅くなる。
 - yazi の設定は、起動のたびに普段の設定（`YAZI_CONFIG_HOME`、未設定なら `%APPDATA%\yazi\config`）を土台にして
   `%LOCALAPPDATA%\yazipane\yazi` に組み立て直し、`YAZI_CONFIG_HOME` でそちらを使わせる。普段の設定ファイル自体は変更しない。
-  - `plugins/` `flavors/` `theme.toml` `vfs.toml` `package.toml`: そのままコピー（プラグインには `yazipane.yazi` を追加）
+  - `plugins/` `flavors/` `vfs.toml` `package.toml`: そのままコピー（プラグインには `yazipane.yazi` を追加）
   - `init.lua`: yazipane の初期化の後ろに普段の `init.lua` を連結
-  - `yazi.toml` `keymap.toml`: `Yazipane/assets/yazi/` の内容を TOML として重ねる
+  - `yazi.toml` `keymap.toml` `theme.toml`: `Yazipane/assets/yazi/` の内容を TOML として重ねる。キー一覧は狭いペインでも読みやすいよう 1 列にする。
     （テーブルは再帰マージ、`prepend_*` は先頭に連結、`append_*` は末尾に連結、それ以外は上書き）
   - WezTerm (Windows) は起動時にレジストリのユーザー環境変数で自身の環境を上書きするため、
     ランチャーからは `YAZIPANE_CONFIG_HOME` という別名で渡し、`wezterm.lua` で詰め替えている。

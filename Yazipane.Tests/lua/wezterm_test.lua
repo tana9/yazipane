@@ -330,9 +330,10 @@ local function load_with_user(source)
 end
 
 test("普段の設定: フォントなどは普段のものを使い、yazipane に必要なものだけ上書きする", function()
-	local ctx = load_with_user([[return { font_size = 12, enable_scroll_bar = true, inactive_pane_hsb = { brightness = 0.9 } }]])
+	local ctx = load_with_user([[return { font_size = 12, enable_scroll_bar = true, enable_kitty_keyboard = true, inactive_pane_hsb = { brightness = 0.9 } }]])
 	eq(ctx.config.font_size, 12, "普段の設定")
 	eq(ctx.config.enable_scroll_bar, false, "yazipane が上書きする")
+	eq(ctx.config.enable_kitty_keyboard, false, "拡張キー入力を無効にする")
 	eq(ctx.config.automatically_reload_config, false, "自動では読み直さない")
 	eq(ctx.config.inactive_pane_hsb.brightness, 0.9, "普段の設定にあればそちら")
 end)

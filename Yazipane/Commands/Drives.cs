@@ -66,11 +66,11 @@ internal static unsafe partial class Drives
         {
             return $"{kind}（メディアなし）";
         }
-        var name = label.Length > 0 ? $"{label}（{kind}）" : kind;
+        var name = label.Length > 0 ? label : kind;
         ulong free, total;
         if (GetDiskFreeSpaceExW(root, &free, &total, null) != 0 && total > 0)
         {
-            name += $"  空き {FormatSize(free)} / {FormatSize(total)}";
+            name = $"空き {FormatSize(free)} / {FormatSize(total)}  {name}";
         }
         return name;
     }

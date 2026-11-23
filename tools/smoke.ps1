@@ -118,6 +118,26 @@ try {
 
     # 1 画面 / 2 画面の切り替え（Ctrl+Shift+Z）は WezTerm に任せている。WezTerm 側で切り替えても yazi の列が追従する
     $leftPane = (wezterm cli list --format json | ConvertFrom-Json | Where-Object { $_.cwd -like '*left*' } | Select-Object -First 1).pane_id
+    $driveRoot = [IO.Path]::GetPathRoot($L)
+    $drivePattern = '(?im)^│> ' + [regex]::Escape($driveRoot.Substring(0, 1)) + '\s+' + [regex]::Escape($driveRoot)
+    Send-Emit $left plugin, yazipane, drives
+    Test-Step 'Alt+D: ドライブの一覧を左寄せで表示する' { (wezterm cli get-text --pane-id $leftPane) -match $drivePattern }
+    if ($results[-1].Result -eq 'NG') { wezterm cli get-text --pane-id $leftPane }
+    wezterm cli send-text --pane-id $leftPane --no-paste ([string][char]27)
+    Test-Step 'Alt+D: Esc で一覧を閉じる' { (wezterm cli get-text --pane-id $leftPane) -notmatch $drivePattern }
+    Send-Emit $left plugin, yazipane, drives
+    Test-Step 'Alt+D: 再び一覧を表示する' { (wezterm cli get-text --pane-id $leftPane) -match $drivePattern }
+    wezterm cli send-text --pane-id $leftPane --no-paste ($driveRoot.Substring(0, 1).ToLowerInvariant())
+    Test-Step 'Alt+D: 英字キーでドライブへ移動する' { (Get-Content (Join-Path $state 'last-left.txt') -Raw).Trim() -eq $driveRoot }
+    Send-Emit $left cd, $L
+    Test-Step 'ドライブ選択後に元の場所へ戻る' { (Get-Content (Join-Path $state 'last-left.txt') -Raw).Trim() -eq $L }
+    Send-Emit $left plugin, yazipane, drives
+    Test-Step 'Alt+D: 矢印操作の前に一覧を表示する' { (wezterm cli get-text --pane-id $leftPane) -match $drivePattern }
+    wezterm cli send-text --pane-id $leftPane --no-paste "`e[A"
+    wezterm cli send-text --pane-id $leftPane --no-paste "`r"
+    Test-Step 'Alt+D: 上矢印と Enter で先頭のドライブへ移動する' { (Get-Content (Join-Path $state 'last-left.txt') -Raw).Trim() -eq $driveRoot }
+    Send-Emit $left cd, $L
+    Test-Step '矢印操作後に元の場所へ戻る' { (Get-Content (Join-Path $state 'last-left.txt') -Raw).Trim() -eq $L }
     $singles = @(Select-String -Path $plog -Pattern 'left layout single').Count
     wezterm cli zoom-pane --pane-id $leftPane --zoom
     Test-Step 'WezTerm で 1 画面にすると yazi が本来の 3 列になる' { @(Select-String -Path $plog -Pattern 'left layout single').Count -gt $singles }
