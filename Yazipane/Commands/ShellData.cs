@@ -64,7 +64,7 @@ internal static unsafe partial class ShellData
         {
             owner = OwnerWindow.Create();
         }
-        catch (Exception ex)
+        catch (COMException ex)
         {
             GlobalFree(hDrop);
             GlobalFree(hEffect);

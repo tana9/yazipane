@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -215,7 +216,8 @@ internal static partial class Launcher
         {
             wez = Process.Start(psi);
         }
-        catch (Exception e)
+        // 実行ファイルが起動できない（Win32Exception）、起動の指定が不正（InvalidOperationException）
+        catch (Exception e) when (e is Win32Exception or InvalidOperationException)
         {
             Log.Write($"start failed: {e}");
             throw new UserFacingException($"WezTerm の起動に失敗しました:\n{e.Message}");
