@@ -797,10 +797,12 @@ local function ui_node(kind, value)
 	function n:style(s) self.st = s return self end
 	function n:area(r) self.rect = r return self end
 	function n:type(t) self.border_type = t return self end
+	function n:align(a) self.aligned = a return self end
 	return n
 end
 
---- yazipane-report を本物の picker と一緒に読み込む。keys は ya.which が順に返す番号（nil でキャンセル）。
+--- yazipane-report を読み込む。keys は ya.which が順に返す番号（nil でキャンセル）。
+--- 描画の中で require されたら失敗させる（本物の yazi では一覧を出せず、確認の画面になってしまったため）。
 local function report(opts)
 	opts = opts or {}
 	local ctx = { state = {}, keys = opts.keys or {} }
@@ -814,6 +816,7 @@ local function report(opts)
 		Style = function() return {} end,
 		Rect = function(r) return r end,
 		Edge = { ALL = 15 },
+		Align = { LEFT = "left" },
 		Border = setmetatable({ ROUNDED = 3 }, { __call = function(_, e) return ui_node("border", e) end }),
 		Clear = function(r) return ui_node("clear", r) end,
 		Line = function(s) return ui_node("line", s) end,
@@ -828,9 +831,7 @@ local function report(opts)
 		}
 	end
 	package.loaded["yazipane-picker"] = nil
-	package.preload["yazipane-picker"] = function()
-		return dofile((PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-picker.yazi/main.lua")))
-	end
+	package.preload["yazipane-picker"] = function() error("描画の中で別のプラグインを require しない") end
 	local R = dofile((PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-report.yazi/main.lua")))
 	ctx.view = function(lines) return R.view(lines) end
 	--- 今の状態を area に描いたときの、本文の行（文字列）と見出し
@@ -896,6 +897,14 @@ test("Alt+C の一覧: 独自の一覧を出せないときは確認の画面で
 	local ctx = report { no_modal = true }
 	ctx.view({ "a", "b" })
 	eq(ctx.confirm.title, "左右の違い", "題名")
+	eq(ctx.confirm.body.aligned, "left", "行頭をそろえるため左寄せ")
+end)
+
+test("Alt+C の一覧: 確認の画面ではなく独自の一覧を出す", function()
+	local ctx = report { keys = {} }
+	ctx.view({ "a" })
+	eq(ctx.confirm, nil, "確認の画面は出さない")
+	eq(ctx.removed, 1, "独自の一覧を出して片付けた")
 end)
 
 T.finish()

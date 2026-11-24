@@ -1,13 +1,26 @@
 -- 長い一覧を上下に動かして確認し、選択するかを尋ねる。
--- 色・枠・見出しは yazipane-picker と共通（枠と見出しは [pick]、操作の説明は [which]）。
+-- 色・枠・見出しは yazipane-picker に合わせる（枠と見出しは [pick]、操作の説明は [which]）。
+-- picker の関数は使わない: 描画（sync context）の中で別のプラグインを require すると、yazi では一覧を出せなかった。
+-- picker の theme() / rounded_border / title_on_border を変えたら、こちらも合わせる。
 
 local TITLE = "左右の違い"
 
+local function theme()
+	local plain = ui.Style()
+	local function style(section, name)
+		local ok, s = pcall(function() return th[section][name] end)
+		return ok and s ~= nil and type(s) ~= "string" and s or plain
+	end
+	return {
+		border = style("pick", "border"),
+		inactive = style("pick", "inactive"),
+		separator_style = style("which", "separator_style"),
+	}
+end
+
 local show = ya.sync(function(state, lines)
 	if not (Modal and Modal.children_add and Modal.children_remove) then return nil end
-	-- 描画は sync context なので、picker もここで読み込む
-	local picker = require("yazipane-picker")
-	local t = picker.theme()
+	local t = theme()
 	local component = { _id = "yazipane-report", offset = 0 }
 	function component:new(area) return setmetatable({ area = area }, { __index = self }) end
 	function component:reflow() return { self } end
@@ -25,10 +38,16 @@ local show = ya.sync(function(state, lines)
 		end
 		local elements = {
 			ui.Clear(box),
-			picker.rounded_border(box, t),
+			-- 角丸の枠（ui.Border.ROUNDED はドキュメントにあるが型定義に無い）
+			---@diagnostic disable-next-line: undefined-field
+			ui.Border(ui.Edge.ALL):type(ui.Border.ROUNDED):style(t.border):area(box),
 			ui.Text(text):area(inner),
 		}
-		elements[#elements + 1] = picker.title_on_border(box, TITLE, t.border)
+		-- 枠の上辺に見出しを重ねて描く（ui.Border には見出しを付ける API が無い）
+		if box.w >= 6 then
+			elements[#elements + 1] = ui.Text(" " .. TITLE .. " "):style(t.border)
+				:area(ui.Rect { x = box.x + 2, y = box.y, w = box.w - 4, h = 1 })
+		end
 		return elements
 	end
 	local id = Modal:children_add(component, 1000)
@@ -50,7 +69,9 @@ end)
 local function view(lines)
 	local ok, id = pcall(show, lines)
 	if not ok or not id then
-		return ya.confirm { title = TITLE, body = ui.Text(table.concat(lines, "\n")), pos = { "center", w = 70, h = 20 } }
+		-- 確認の画面の本文は既定で中央寄せになり行頭がそろわないので、左寄せにする
+		local body = ui.Text(table.concat(lines, "\n")):align(ui.Align.LEFT)
+		return ya.confirm { title = TITLE, body = body, pos = { "center", w = 70, h = 20 } }
 	end
 	local offset = 0
 	local success, result = pcall(function()

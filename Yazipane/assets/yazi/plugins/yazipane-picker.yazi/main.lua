@@ -1,7 +1,8 @@
 -- 候補の描画とキー入力を分け、yazi の既定の一覧にある左側の固定余白を避ける。
 -- 色はテーマに合わせる。枠と選択中の行は yazi の選択の一覧（開くアプリの選択）と同じ [pick]、
 -- キーと説明はキー候補の一覧と同じ [which]。th の各部は userdata のことがあるので type では判定せず、読めない項目は色を付けない。
--- yazipane-report も使う（描画は sync context なので、report は ya.sync の中で require する）。
+-- yazipane-report にも同じ作りの theme() と枠・見出しの描画がある（描画の中で別のプラグインを require すると一覧を出せないため）。
+-- 変えるときは両方を合わせる。
 local function theme()
 	local plain = ui.Style()
 	local function get(section, name)
@@ -122,5 +123,4 @@ local function choose(cands, title)
 end
 
 
--- theme / rounded_border / title_on_border は yazipane-report の描画（sync context）からも使う
-return { choose = choose, theme = theme, rounded_border = rounded_border, title_on_border = title_on_border }
+return { choose = choose }

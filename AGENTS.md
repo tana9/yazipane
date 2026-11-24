@@ -80,6 +80,8 @@ yazipane のコードを変更するエージェント向けの注意点。プ�
 - Shell の UI オブジェクト（右クリックメニュー / IDataObject）は 1 つのフォルダの中身にしか作れない（`ShellItems`）。
 - yazi のテーマ `th` の各部（`th.which`、`th.pick` など）は Lua の table ではなく userdata のことがある。`type(...) == "table"` で判定せず、
   `pcall` で項目を読み、読めなければ色なし（`ui.Style()`）にする（例: `yazipane-picker` の `theme()`）。
+- 描画（`ya.sync` の中や部品の `redraw`）で別のプラグインを `require` しない。yazi では失敗し、`yazipane-report` が一覧を出せずに
+  代わりの確認の画面になった（偽物の yazi を使うテストでは通ってしまう）。共通にしたい描画の関数は、各プラグインに同じものを置く。
 - 独自の一覧などの画面は、自前の色を決めずにテーマの対応する項目（選択の一覧なら `[pick]`、キー候補なら `[which]`）を使う。
 
 ## コーディング方針
