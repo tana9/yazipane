@@ -12,6 +12,7 @@ prepend_keymap = [
 	{ on = "<A-b>", run = "plugin yazipane folder-pairs", desc = "左右のフォルダの組を保存 / 復元 / 削除" },
 	{ on = "<A-d>",   run = "plugin yazipane drives", desc = "ドライブを選んで移動" },
 	{ on = "<A-e>",   run = "plugin yazipane explorer", desc = "今のフォルダをエクスプローラーで開く" },
+	{ on = "!",       run = "shell 'wt -d .' --orphan", desc = "今のフォルダで Windows Terminal を開く" },
 	{ on = "<S-F10>", run = "plugin yazipane menu", desc = "右クリックメニュー" },
 	{ on = "<C-c>",   run = "plugin yazipane clipboard", desc = "ファイルをクリップボードにコピー（ほかのアプリで Ctrl+V）" },
 	{ on = "<A-x>",   run = "plugin yazipane clipboard-cut", desc = "ファイルをクリップボードに切り取り" },

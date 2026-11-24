@@ -532,7 +532,7 @@ test("Alt+H: キー一覧に keymap.toml の yazipane のキーがすべて載�
 	local names = {
 		["<F5>"] = "F5", ["<F6>"] = "F6", ["<A-o>"] = "Alt+O", ["<A-s>"] = "Alt+S", ["<A-i>"] = "Alt+I", ["<A-x>"] = "Alt+X", ["<A-n>"] = "Alt+N",
 		["<A-b>"] = "Alt+B", ["<A-d>"] = "Alt+D", ["<A-e>"] = "Alt+E", ["<S-F10>"] = "Shift+F10", ["<C-c>"] = "Ctrl+C", ["<C-v>"] = "Ctrl+V",
-		["<A-p>"] = "Alt+P", ["<A-l>"] = "Alt+L", ["<A-c>"] = "Alt+C", ["<A-h>"] = "Alt+H", ["q"] = "q", ["="] = "=",
+		["<A-p>"] = "Alt+P", ["<A-l>"] = "Alt+L", ["<A-c>"] = "Alt+C", ["<A-h>"] = "Alt+H", ["q"] = "q", ["="] = "=", ["!"] = "!",
 	}
 	for on in keymap:gmatch('on%s*=%s*"([^"]+)"') do
 		local name = names[on]
