@@ -70,13 +70,14 @@ internal static unsafe partial class FileOps
         return result.Code;
     }
 
+    /// <summary>切り取ったものを貼り付けた後に、クリップボードを消すか（全件を移動できたときだけ）。</summary>
+    internal static bool ShouldClearClipboard(Result result, int count) =>
+        result.Code == Done && count > 0 && result.Succeeded == count && result.Skipped == 0 && result.Errors == 0;
+
     /// <summary>
     /// paths を dest へコピー / 移動する。extraFlags はテスト用（ダイアログを出さない FOF_SILENT など）。
     /// エラーの説明は標準エラー出力に書く。
     /// </summary>
-    internal static bool ShouldClearClipboard(Result result, int count) =>
-        result.Code == Done && count > 0 && result.Succeeded == count && result.Skipped == 0 && result.Errors == 0;
-
     internal static Result Execute(bool move, string dest, IReadOnlyList<string> paths, uint extraFlags = 0)
     {
         var dst = Path.GetFullPath(dest);
