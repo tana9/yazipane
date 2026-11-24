@@ -788,4 +788,114 @@ test("起動時: 反対ペインに今のフォルダを知らせ、問い合わ
 	eq(pubs(ctx, "yazipane-cwd")[1].value, "C:\\work", "今のフォルダ")
 	eq(#pubs(ctx, "yazipane-hello"), 1, "問い合わせ")
 end)
+
+-- ---- Alt+C の一覧（yazipane-report） ----
+
+--- 描画の部品の偽物。種類・中身・スタイル・範囲を記録するだけ。
+local function ui_node(kind, value)
+	local n = { kind = kind, value = value }
+	function n:style(s) self.st = s return self end
+	function n:area(r) self.rect = r return self end
+	function n:type(t) self.border_type = t return self end
+	return n
+end
+
+--- yazipane-report を本物の picker と一緒に読み込む。keys は ya.which が順に返す番号（nil でキャンセル）。
+local function report(opts)
+	opts = opts or {}
+	local ctx = { state = {}, keys = opts.keys or {} }
+	ya = {
+		sync = function(f) return function(...) return f(ctx.state, ...) end end,
+		which = function(args) ctx.which = args return table.remove(ctx.keys, 1) end,
+		confirm = function(args) ctx.confirm = args return true end,
+	}
+	ui = {
+		render = function() end,
+		Style = function() return {} end,
+		Rect = function(r) return r end,
+		Edge = { ALL = 15 },
+		Border = setmetatable({ ROUNDED = 3 }, { __call = function(_, e) return ui_node("border", e) end }),
+		Clear = function(r) return ui_node("clear", r) end,
+		Line = function(s) return ui_node("line", s) end,
+		Text = function(s) return ui_node("text", s) end,
+	}
+	th = nil
+	Modal = nil
+	if not opts.no_modal then
+		Modal = {
+			children_add = function(_, component) ctx.modal = component return 1 end,
+			children_remove = function(_, id) ctx.removed = id end,
+		}
+	end
+	package.loaded["yazipane-picker"] = nil
+	package.preload["yazipane-picker"] = function()
+		return dofile((PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-picker.yazi/main.lua")))
+	end
+	local R = dofile((PLUGIN:gsub("yazipane%.yazi[/\\]main%.lua$", "yazipane-report.yazi/main.lua")))
+	ctx.view = function(lines) return R.view(lines) end
+	--- 今の状態を area に描いたときの、本文の行（文字列）と見出し
+	ctx.draw = function(area)
+		local drawn = ctx.modal:new(area):redraw()
+		local text, title
+		for _, e in ipairs(drawn) do
+			if e.kind == "text" and type(e.value) == "table" then text = e.value end
+			if e.kind == "text" and type(e.value) == "string" then title = e.value end
+		end
+		local rows = {}
+		for i, l in ipairs(text or {}) do rows[i] = l.value end
+		return rows, title
+	end
+	return ctx
+end
+
+local function lines_of(n)
+	local list = {}
+	for i = 1, n do list[i] = "行" .. i end
+	return list
+end
+
+test("Alt+C の一覧: S で選択し、Esc / Enter では選択しない。どちらでも一覧を片付ける", function()
+	local ctx = report { keys = { 5 } }
+	eq(ctx.view(lines_of(3)), true, "S")
+	eq(ctx.removed, 1, "一覧を削除")
+	ctx = report { keys = { 6 } }
+	eq(ctx.view(lines_of(3)), false, "Enter")
+	ctx = report { keys = {} }
+	eq(ctx.view(lines_of(3)), false, "Esc")
+	eq(ctx.removed, 1, "キャンセルでも一覧を削除")
+end)
+
+test("Alt+C の一覧: 見出しと操作の説明を出し、収まらない分は ↓ / PageDown で送る", function()
+	-- 高さ 6 の場所 = 枠 2 行 + 説明 1 行 + 本文 3 行
+	local area = { x = 0, y = 0, w = 40, h = 6 }
+	local ctx = report { keys = { 2, 2 } }
+	local shown
+	ui.render = function() if ctx.modal then shown = { ctx.draw(area) } end end
+	ctx.view(lines_of(10))
+	local rows, title = table.unpack(shown)
+	eq(title, " 左右の違い ", "見出し")
+	eq(rows[1]:match("^↑↓") ~= nil, true, "1 行目は操作の説明")
+	eq(table.concat(rows, ",", 2), "行3,行4,行5", "↓ 2 回で 2 行送る")
+
+	ctx = report { keys = { 4, 4 } }
+	ui.render = function() if ctx.modal then shown = { ctx.draw(area) } end end
+	ctx.view(lines_of(10))
+	eq(table.concat(shown[1], ",", 2), "行8,行9,行10", "PageDown は最後の行が見える所で止まる")
+end)
+
+test("Alt+C の一覧: ↑ は先頭より前へ戻らない", function()
+	local area = { x = 0, y = 0, w = 40, h = 6 }
+	local ctx = report { keys = { 1, 2, 1, 1 } }
+	local rows
+	ui.render = function() if ctx.modal then rows = ctx.draw(area) end end
+	ctx.view(lines_of(10))
+	eq(table.concat(rows, ",", 2), "行1,行2,行3", "先頭")
+end)
+
+test("Alt+C の一覧: 独自の一覧を出せないときは確認の画面で全部を見せる", function()
+	local ctx = report { no_modal = true }
+	ctx.view({ "a", "b" })
+	eq(ctx.confirm.title, "左右の違い", "題名")
+end)
+
 T.finish()
