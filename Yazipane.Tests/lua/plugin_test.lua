@@ -44,6 +44,7 @@ local function load(opts)
 	}
 	ui = {
 		render = function() end,
+		Style = function() return {} end,
 		Line = function(s) return s end,
 		Text = function(s) return { wrap = function(self) return self end } end,
 		Wrap = { YES = 1 },

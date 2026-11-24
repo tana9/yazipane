@@ -1,8 +1,33 @@
 -- 候補の描画とキー入力を分け、yazi の既定の一覧にある左側の固定余白を避ける。
+-- 色はテーマに合わせる。枠と選択中の行は yazi の選択の一覧（開くアプリの選択）と同じ [pick]、
+-- キーと説明はキー候補の一覧と同じ [which]。th の各部は userdata のことがあるので type では判定せず、読めない項目は色を付けない。
+local function theme()
+	local plain = ui.Style()
+	local function get(section, name)
+		local ok, value = pcall(function() return th[section][name] end)
+		if ok then return value end
+	end
+	local function style(section, name)
+		local s = get(section, name)
+		return s ~= nil and type(s) ~= "string" and s or plain
+	end
+	local separator = get("which", "separator")
+	return {
+		border = style("pick", "border"),
+		active = style("pick", "active"),
+		inactive = style("pick", "inactive"),
+		cand = style("which", "cand"),
+		desc = style("which", "desc"),
+		separator = type(separator) == "string" and separator or "  ",
+		separator_style = style("which", "separator_style"),
+	}
+end
+
 local show_candidates = ya.sync(function(state, cands)
 	if not (Modal and Modal.children_add and Modal.children_remove) then
 		return nil
 	end
+	local t = theme()
 	local component = { _id = "yazipane-candidates", selected = 1 }
 	function component:new(area) return setmetatable({ area = area }, { __index = self }) end
 	function component:reflow() return { self } end
@@ -16,9 +41,26 @@ local show_candidates = ya.sync(function(state, cands)
 		local first = math.max(1, math.min(self.selected - height + 1, #cands - height + 1))
 		for i = 1, height do
 			local index = first + i - 1
-			lines[i] = (index == self.selected and "> " or "  ") .. cands[index].on .. "  " .. cands[index].desc
+			if index == self.selected then
+				-- 選択中の行は yazi の選択の一覧と同じく、行全体を [pick] の active で描く
+				lines[i] = ui.Line("> " .. cands[index].on .. t.separator .. cands[index].desc):style(t.active)
+			else
+				lines[i] = ui.Line {
+					ui.Span("  "),
+					ui.Span(cands[index].on):style(t.cand),
+					ui.Span(t.separator):style(t.separator_style),
+					ui.Span(cands[index].desc):style(t.desc),
+				}:style(t.inactive)
+			end
 		end
-		return { ui.Clear(box), ui.Border(ui.Edge.ALL):area(box), ui.Text(lines):area(inner) }
+		-- 枠は yazi の選択の一覧と同じ角丸（ui.Border.ROUNDED はドキュメントにあるが型定義に無い）
+		---@diagnostic disable-next-line: undefined-field
+		local rounded = ui.Border.ROUNDED
+		return {
+			ui.Clear(box),
+			ui.Border(ui.Edge.ALL):type(rounded):style(t.border):area(box),
+			ui.Text(lines):area(inner),
+		}
 	end
 	local id = Modal:children_add(component, 1000)
 	state.candidate_component = component

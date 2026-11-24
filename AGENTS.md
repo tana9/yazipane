@@ -32,6 +32,7 @@ yazipane のコードを変更するエージェント向けの注意点。プ�
   - 名前空間はフォルダごと（`Yazipane.Commands` / `.Common` / `.Interop` / `.Launch`）。csproj でプロジェクト全体に using している。
   - smoke は WezTerm のウィンドウを実際に開き、普段の `%LOCALAPPDATA%\yazipane` を使う（ユーザーに確認してから実行する）。
   - 右クリックメニュー・ドラッグ・キー操作そのものは smoke の対象外。変更したらユーザーに手動確認を頼む。
+  - 手動確認を頼む前に、自分で `task restart` して変更後の版を起動しておく（ユーザーに再起動を任せない）。
 - exe のサブコマンド（`--transfer` など）は、Debug ビルドの `Yazipane/bin/Debug/net11.0-windows/win-x64/yazipane.exe` を一時フォルダの小さなファイルに対して直接呼んで確かめられる。
 
 ## NativeAOT の制約
@@ -77,6 +78,9 @@ yazipane のコードを変更するエージェント向けの注意点。プ�
 - プラグインから反対ペインへの送信は `main.lua` の `pub()` を使う（相手が未接続・終了済みでもエラーにしない）。`ps.pub_to` を直接呼ばない。
 - `init.lua` は yazi の内部フィールド（`Current` の `_area` / `_folder.window`）に依存している。読めない場合は yazi の既定の動作に戻す作りを保つ。
 - Shell の UI オブジェクト（右クリックメニュー / IDataObject）は 1 つのフォルダの中身にしか作れない（`ShellItems`）。
+- yazi のテーマ `th` の各部（`th.which`、`th.pick` など）は Lua の table ではなく userdata のことがある。`type(...) == "table"` で判定せず、
+  `pcall` で項目を読み、読めなければ色なし（`ui.Style()`）にする（例: `yazipane-picker` の `theme()`）。
+- 独自の一覧などの画面は、自前の色を決めずにテーマの対応する項目（選択の一覧なら `[pick]`、キー候補なら `[which]`）を使う。
 
 ## コーディング方針
 
