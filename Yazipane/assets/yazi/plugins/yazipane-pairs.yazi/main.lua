@@ -4,11 +4,11 @@ local function run(deps)
 	local notify, failure, peer_dest = deps.notify, deps.failure, deps.peer_dest
 	local get_cwd, send_cd, SIDE = deps.get_cwd, deps.send_cd, deps.side
 	if not require_exe() then return end
-	local mode = choose_candidates {
+	local mode = choose_candidates({
 		{ on = "s", desc = "今の左右のフォルダを保存" },
 		{ on = "o", desc = "保存した組を開く" },
 		{ on = "d", desc = "保存した組を削除" },
-	}
+	}, "フォルダの組")
 	if not mode then return end
 	local code, out, err = run_exe({ "--pairs", "list" })
 	if code ~= 0 then return notify("保存した組を読めません: " .. failure(code, out, err), "error") end
@@ -40,7 +40,7 @@ local function run(deps)
 		if i > #chars then break end
 		cands[i] = { on = chars:sub(i, i), desc = p.name .. "  " .. p.left .. " │ " .. p.right }
 	end
-	local i = choose_candidates(cands)
+	local i = choose_candidates(cands, mode == 3 and "削除する組" or "開く組")
 	if not i then return end
 	local pair = pairs[i]
 	if mode == 3 then

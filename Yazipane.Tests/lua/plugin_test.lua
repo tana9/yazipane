@@ -316,6 +316,7 @@ test("Alt+D: 独自の一覧を使い、選択後に片付ける", function()
 	ctx.run("drives")
 	eq(ctx.which.silent, true, "既定の一覧は表示しない")
 	eq(ctx.which.cands[1].on, "c", "選択キー")
+	eq(ctx.modal.title, "ドライブ", "見出し")
 	eq(ctx.removed_modal, 1, "一覧を削除")
 	eq(ctx.emitted("cd")[1][1], "C:\\", "移動先")
 end)
@@ -343,6 +344,7 @@ end)
 test("Alt+B: 左右の順序で名前付きの組を保存する", function()
 	local ctx = yazipane { modal = true, which = { 1 }, input = "仕事", cwd = "C:\\left", peer_cwd = "D:\\right" }
 	ctx.run("folder-pairs")
+	eq(ctx.modal.title, "フォルダの組", "操作の一覧の見出し")
 	eq(ctx.commands[1], "--pairs list")
 	eq(ctx.commands[2], "--pairs save 仕事 C:\\left D:\\right")
 	eq(ctx.notes[1], "info:フォルダの組を保存しました: 仕事")
@@ -351,6 +353,7 @@ end)
 test("Alt+B: 保存した組を両ペインに復元する", function()
 	local ctx = yazipane { modal = true, which = { 2, 1 }, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
 	ctx.run("folder-pairs")
+	eq(ctx.modal.title, "開く組", "組の一覧の見出し")
 	eq(ctx.emitted("cd")[1][1], "C:\\left", "こちら")
 	local found
 	for _, p in ipairs(ctx.pubs) do if p.kind == "yazipane-cd" then found = p.value end end
@@ -376,6 +379,7 @@ end)
 test("Alt+B: 削除を確認したときだけ保存した組を消す", function()
 	local ctx = yazipane { modal = true, which = { 3, 1 }, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
 	ctx.run("folder-pairs")
+	eq(ctx.modal.title, "削除する組", "組の一覧の見出し")
 	eq(ctx.commands[2], "--pairs delete 仕事")
 	local cancelled = yazipane { modal = true, which = { 3, 1 }, confirm = false, output = { stdout = "仕事\tC:\\left\tD:\\right" } }
 	cancelled.run("folder-pairs")

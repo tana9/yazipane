@@ -1,6 +1,7 @@
 -- 候補の描画とキー入力を分け、yazi の既定の一覧にある左側の固定余白を避ける。
 -- 色はテーマに合わせる。枠と選択中の行は yazi の選択の一覧（開くアプリの選択）と同じ [pick]、
 -- キーと説明はキー候補の一覧と同じ [which]。th の各部は userdata のことがあるので type では判定せず、読めない項目は色を付けない。
+-- yazipane-report にも同じ関数がある（ya.sync の中から別のプラグインの関数を呼ばないため）。変えるときは両方を合わせる。
 local function theme()
 	local plain = ui.Style()
 	local function get(section, name)
@@ -23,12 +24,18 @@ local function theme()
 	}
 end
 
-local show_candidates = ya.sync(function(state, cands)
+-- 枠の上辺に見出しを重ねて描く（ui.Border には見出しを付ける API が無い）
+local function title_on_border(box, title, style)
+	if not title or title == "" or box.w < 6 then return nil end
+	return ui.Text(" " .. title .. " "):style(style):area(ui.Rect { x = box.x + 2, y = box.y, w = box.w - 4, h = 1 })
+end
+
+local show_candidates = ya.sync(function(state, cands, title)
 	if not (Modal and Modal.children_add and Modal.children_remove) then
 		return nil
 	end
 	local t = theme()
-	local component = { _id = "yazipane-candidates", selected = 1 }
+	local component = { _id = "yazipane-candidates", selected = 1, title = title }
 	function component:new(area) return setmetatable({ area = area }, { __index = self }) end
 	function component:reflow() return { self } end
 	function component:redraw()
@@ -56,11 +63,13 @@ local show_candidates = ya.sync(function(state, cands)
 		-- 枠は yazi の選択の一覧と同じ角丸（ui.Border.ROUNDED はドキュメントにあるが型定義に無い）
 		---@diagnostic disable-next-line: undefined-field
 		local rounded = ui.Border.ROUNDED
-		return {
+		local elements = {
 			ui.Clear(box),
 			ui.Border(ui.Edge.ALL):type(rounded):style(t.border):area(box),
 			ui.Text(lines):area(inner),
 		}
+		elements[#elements + 1] = title_on_border(box, self.title, t.border)
+		return elements
 	end
 	local id = Modal:children_add(component, 1000)
 	state.candidate_component = component
@@ -81,8 +90,9 @@ local hide_candidates = ya.sync(function(state, id)
 	ui.render()
 end)
 
-local function choose(cands)
-	local ok, id = pcall(show_candidates, cands)
+--- 候補から 1 つ選ばせ、その番号を返す（キャンセルなら nil）。title は枠の上辺に出す見出し。
+local function choose(cands, title)
+	local ok, id = pcall(show_candidates, cands, title)
 	if not ok or not id then return ya.which { cands = cands } end
 	local keys = { table.unpack(cands) }
 	keys[#keys + 1] = { on = "<Up>" }

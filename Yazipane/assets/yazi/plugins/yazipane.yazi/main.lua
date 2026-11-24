@@ -678,8 +678,8 @@ local function drag()
 end
 
 --- ドライブの一覧から選んで移動する（Alt+D）。キーはドライブ名の英字。
-local function choose_candidates(cands)
-	return require("yazipane-picker").choose(cands)
+local function choose_candidates(cands, title)
+	return require("yazipane-picker").choose(cands, title)
 end
 
 -- 保存 / 復元の画面は独立したプラグインにまとめる。
@@ -709,7 +709,7 @@ local function drives()
 	if #cands == 0 then
 		return notify("ドライブが見つかりません", "warn")
 	end
-	local i = choose_candidates(cands)
+	local i = choose_candidates(cands, "ドライブ")
 	if i then
 		ya.emit("cd", { roots[i], raw = true })
 	end
