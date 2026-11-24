@@ -1,7 +1,7 @@
 -- 候補の描画とキー入力を分け、yazi の既定の一覧にある左側の固定余白を避ける。
 -- 色はテーマに合わせる。枠と選択中の行は yazi の選択の一覧（開くアプリの選択）と同じ [pick]、
 -- キーと説明はキー候補の一覧と同じ [which]。th の各部は userdata のことがあるので type では判定せず、読めない項目は色を付けない。
--- yazipane-report にも同じ関数がある（ya.sync の中から別のプラグインの関数を呼ばないため）。変えるときは両方を合わせる。
+-- yazipane-report も使う（描画は sync context なので、report は ya.sync の中で require する）。
 local function theme()
 	local plain = ui.Style()
 	local function get(section, name)
@@ -22,6 +22,12 @@ local function theme()
 		separator = type(separator) == "string" and separator or "  ",
 		separator_style = style("which", "separator_style"),
 	}
+end
+
+-- 枠は yazi の選択の一覧と同じ角丸（ui.Border.ROUNDED はドキュメントにあるが型定義に無い）
+local function rounded_border(box, t)
+	---@diagnostic disable-next-line: undefined-field
+	return ui.Border(ui.Edge.ALL):type(ui.Border.ROUNDED):style(t.border):area(box)
 end
 
 -- 枠の上辺に見出しを重ねて描く（ui.Border には見出しを付ける API が無い）
@@ -60,12 +66,9 @@ local show_candidates = ya.sync(function(state, cands, title)
 				}:style(t.inactive)
 			end
 		end
-		-- 枠は yazi の選択の一覧と同じ角丸（ui.Border.ROUNDED はドキュメントにあるが型定義に無い）
-		---@diagnostic disable-next-line: undefined-field
-		local rounded = ui.Border.ROUNDED
 		local elements = {
 			ui.Clear(box),
-			ui.Border(ui.Edge.ALL):type(rounded):style(t.border):area(box),
+			rounded_border(box, t),
 			ui.Text(lines):area(inner),
 		}
 		elements[#elements + 1] = title_on_border(box, self.title, t.border)
@@ -119,4 +122,5 @@ local function choose(cands, title)
 end
 
 
-return { choose = choose }
+-- theme / rounded_border / title_on_border は yazipane-report の描画（sync context）からも使う
+return { choose = choose, theme = theme, rounded_border = rounded_border, title_on_border = title_on_border }
