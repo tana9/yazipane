@@ -144,4 +144,39 @@ public sealed class FileOpsTests : IDisposable
         Assert.False(FileOps.ShouldClearClipboard(new(FileOps.Aborted, 2, 0, 0), 2));
     }
 
+    [Fact]
+    public void 先の操作でできたものがあれば後の失敗は失敗の件数に数えて続ける()
+    {
+        // 1 回目で 2 件できた後、3 件を渡した 2 回目が件数なしで失敗した（パスを解決できない など）
+        var (total, stop) = FileOps.Add(new(FileOps.Done, 2, 0, 0), new(FileOps.Failed, 0, 0, 0), 3);
+
+        Assert.Equal(new FileOps.Result(FileOps.Done, 2, 0, 3), total);
+        Assert.False(stop);
+    }
+
+    [Fact]
+    public void 失敗の件数は進み具合の通知で数えた分と重ねない()
+    {
+        var (total, _) = FileOps.Add(new(FileOps.Done, 1, 0, 0), new(FileOps.Failed, 0, 0, 2), 3);
+
+        Assert.Equal(new FileOps.Result(FileOps.Done, 1, 0, 3), total);
+    }
+
+    [Fact]
+    public void できたものが無いまま失敗したら全体を失敗にして止める()
+    {
+        var (total, stop) = FileOps.Add(new(FileOps.Done, 0, 1, 0), new(FileOps.Failed, 0, 0, 0), 2);
+
+        Assert.Equal(FileOps.Failed, total.Code);
+        Assert.True(stop);
+    }
+
+    [Fact]
+    public void 取り消されたら件数を足して止める()
+    {
+        var (total, stop) = FileOps.Add(new(FileOps.Done, 2, 0, 0), new(FileOps.Aborted, 1, 0, 0), 3);
+
+        Assert.Equal(new FileOps.Result(FileOps.Aborted, 3, 0, 0), total);
+        Assert.True(stop);
+    }
 }

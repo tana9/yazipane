@@ -104,24 +104,41 @@ internal static unsafe partial class FileOps
         var groups = !move && sameDir.Count > 0
             ? new[] { [.. sources.Except(sameDir)], sameDir }
             : [sources];
-        var succeeded = 0;
-        var skipped = move ? sameDir.Count : 0;
-        var errors = missing;
+        var total = new Result(Done, 0, move ? sameDir.Count : 0, missing);
         foreach (var group in groups)
         {
             if (group.Count == 0) continue;
             var flags = FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR | FOFX_ADDUNDORECORD | extraFlags;
             if (!move && IsIn(group[0], dst)) flags |= FOF_RENAMEONCOLLISION;
-            var result = ExecuteBatch(move, dst, group, flags);
-            succeeded += result.Succeeded;
-            skipped += result.Skipped;
-            errors += result.Errors;
-            if (result.Code != Done)
+            var (next, stop) = Add(total, ExecuteBatch(move, dst, group, flags), group.Count);
+            total = next;
+            if (stop)
             {
-                return new Result(result.Code, succeeded, skipped, errors);
+                break;
             }
         }
-        return new Result(Done, succeeded, skipped, errors);
+        return total;
+    }
+
+    /// <summary>
+    /// 分けて行った操作の結果を足し合わせる。count は今回の操作に渡した項目の数。
+    /// 先の操作でできたものがあるのに後の操作が失敗したときは、全体を失敗にせず、今回の項目を失敗の件数に数えて続ける
+    /// （失敗にすると件数を返さず、できたものがあっても「できません」とだけ表示されるため）。
+    /// 戻り値の Stop が true なら、残りの操作は行わない。
+    /// </summary>
+    internal static (Result Total, bool Stop) Add(Result total, Result batch, int count)
+    {
+        var sum = new Result(total.Code, total.Succeeded + batch.Succeeded, total.Skipped + batch.Skipped, total.Errors + batch.Errors);
+        if (batch.Code == Done)
+        {
+            return (sum, false);
+        }
+        if (batch.Code == Failed && total.Succeeded > 0)
+        {
+            var uncounted = Math.Max(0, count - batch.Succeeded - batch.Skipped - batch.Errors);
+            return (sum with { Errors = sum.Errors + uncounted }, false);
+        }
+        return (sum with { Code = batch.Code }, true);
     }
 
     private static Result ExecuteBatch(bool move, string dst, List<string> sources, uint flags)
