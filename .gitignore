@@ -12,6 +12,9 @@ publish/
 # アイコン生成時の確認用画像
 Yazipane/icon/preview.png
 
+# 手元の作業メモ（AGENTS.md から参照する。リポジトリには含めない）
+TODO.md
+
 # IDE
 .vs/
 .vscode/
